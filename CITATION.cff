@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use PQC Bridge in research or documentation, please cite this repository."
+title: "PQC Bridge"
+abstract: "A developer-friendly, cross-platform post-quantum cryptography SDK."
+authors:
+  - name: "PQC Bridge contributors"
+repository-code: "https://github.com/VrianCao/pqc-bridge"
+url: "https://github.com/VrianCao/pqc-bridge"
+license: "MIT OR Apache-2.0"
+version: "0.1.0"
+date-released: "2026-05-16"
+keywords:
+  - post-quantum cryptography
+  - PQC
+  - ML-KEM
+  - ML-DSA
+  - cryptography SDK

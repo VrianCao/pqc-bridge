@@ -6,17 +6,38 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
     name: Verify Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all --check
       - run: cargo test --workspace --all-targets --all-features
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  source-archive:
+    name: Source Archive
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v6
+      - run: git archive --format=tar.gz --output=pqc-bridge-source.tar.gz HEAD
+      - run: shasum -a 256 pqc-bridge-source.tar.gz > pqc-bridge-source.tar.gz.sha256
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-source-materials
+          path: |
+            pqc-bridge-source.tar.gz
+            pqc-bridge-source.tar.gz.sha256
+            sbom.spdx.json

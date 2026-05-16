@@ -1,0 +1,25 @@
+name: Security Hardening
+description: Track security hardening work that is not a private vulnerability.
+title: "security: "
+labels: ["security"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What should be hardened?
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk
+      description: What could go wrong without this work?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+    validations:
+      required: true
