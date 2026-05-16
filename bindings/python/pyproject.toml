@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pqcb"
+version = "0.1.0"
+description = "Python bindings for PQC Bridge."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT OR Apache-2.0"
+authors = [
+  { name = "PQC Bridge contributors" }
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Security :: Cryptography",
+]
+
+[project.urls]
+Homepage = "https://github.com/VrianCao/pqc-bridge"
+Repository = "https://github.com/VrianCao/pqc-bridge"
+Documentation = "https://github.com/VrianCao/pqc-bridge/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pqcb"]

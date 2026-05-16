@@ -1,0 +1,36 @@
+/target/
+**/*.rs.bk
+
+# OS / editor state
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Language package outputs
+node_modules/
+dist/
+build/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Native build artifacts
+*.a
+*.dylib
+*.dll
+*.lib
+*.so
+*.o
+*.class
+.build/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example

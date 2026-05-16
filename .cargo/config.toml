@@ -1,0 +1,6 @@
+[alias]
+xtask-check = "check --workspace --all-targets --all-features"
+xtask-test = "test --workspace --all-targets --all-features"
+
+[build]
+rustflags = ["-Dunsafe_op_in_unsafe_fn"]
