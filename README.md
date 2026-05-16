@@ -56,6 +56,20 @@ docs/
   THREAT_MODEL.md   Security boundaries and threat model
 ```
 
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [API Design](docs/API_DESIGN.md)
+- [Backend Strategy](docs/BACKENDS.md)
+- [Bindings](docs/BINDINGS.md)
+- [FAQ](docs/FAQ.md)
+- [Glossary](docs/GLOSSARY.md)
+- [Migration Guide](docs/MIGRATION.md)
+- [Threat Model](docs/THREAT_MODEL.md)
+- [Compliance Notes](docs/COMPLIANCE.md)
+- [Supply Chain](docs/SUPPLY_CHAIN.md)
+- [Roadmap](docs/ROADMAP.md)
+
 ## Quick Start
 
 Build and test the Rust workspace:

@@ -1,0 +1,33 @@
+name: Backend Integration
+description: Propose or track a cryptographic backend integration.
+title: "backend: "
+labels: ["backend"]
+body:
+  - type: input
+    id: backend
+    attributes:
+      label: Backend
+      description: Name and upstream URL.
+    validations:
+      required: true
+  - type: textarea
+    id: algorithms
+    attributes:
+      label: Algorithms
+      description: Which algorithms and parameter sets would this backend provide?
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Provenance and License
+      description: Include upstream version, license, maintenance status, and review notes.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security Notes
+      description: Include KAT, fuzzing, side-channel, and platform notes.
+    validations:
+      required: true
