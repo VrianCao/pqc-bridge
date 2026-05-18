@@ -1,6 +1,6 @@
 # RFC 0002: First Backend Selection Scoring Matrix
 
-Status: Proposed
+Status: Accepted
 
 ## Summary
 
@@ -111,6 +111,69 @@ certification status is recorded as a limitation, not inferred.
 | Open Quantum Safe (`oqs` / liboqs) | liboqs compatibility | `https://github.com/open-quantum-safe/liboqs`, `https://github.com/open-quantum-safe/liboqs-rust`, `https://crates.io/crates/oqs` | Pin Rust wrapper `oqs = 0.11.0` and the vendored/system liboqs release or commit used by `oqs-sys`; do not float C sources. | Rust wrapper is `MIT OR Apache-2.0`; liboqs license and bundled third-party notices must be reviewed before redistribution. | Wrapper exposes `ml_kem` and `ml_dsa` feature families for ML-KEM and ML-DSA parameter sets. | liboqs upstream KATs plus project manifests; project fixtures must record liboqs version and build flags. | Native C library via `oqs-sys`; supports common server platforms; WASM/mobile require separate build validation and toolchain notes. | Open Quantum Safe is active and broadly used for PQC experimentation and interoperability. | Larger native dependency and broad algorithm surface; C/FFI ownership and build reproducibility increase risk; compatibility behavior must not leak into stable public API. | Pass as later compatibility backend, not v0.2 default. |
 | rustpq split provider (`pqcrypto-mlkem` + `pqcrypto-mldsa`) | Rust-native wrapper over PQClean-derived implementations | `https://github.com/rustpq/pqcrypto/`, `https://crates.io/crates/pqcrypto-mlkem`, `https://crates.io/crates/pqcrypto-mldsa` | Pin exact crate versions: `pqcrypto-mlkem = 0.1.1`, `pqcrypto-mldsa = 0.1.2`; record enabled SIMD features. | `MIT OR Apache-2.0` for both crates. | Separate crates cover ML-KEM and ML-DSA families, including ML-KEM-768 and ML-DSA-65. | PQClean-derived vectors and project KAT manifests; manifests must record SIMD feature state. | Rust crate surface with generated/native implementation details; default features include `avx2`, `neon`, and `std`; portability needs feature review. | Maintained in the rustpq ecosystem with current crates.io releases. | Default SIMD features may complicate reproducible cross-platform behavior; side-channel and generated-code provenance need deeper review than the RustCrypto path. | Pass as backup Rust-native candidate pending SIMD and provenance review. |
 | AWS-LC via `aws-lc-rs` or direct AWS-LC FFI | OpenSSL/AWS-LC system backend | `https://github.com/aws/aws-lc`, `https://github.com/aws/aws-lc-rs`, `https://crates.io/crates/aws-lc-rs` | Pin `aws-lc-rs = 1.17.0` if Rust APIs expose the needed primitives, otherwise pin AWS-LC source release/commit and generated bindings. | `aws-lc-rs` is `ISC AND (Apache-2.0 OR ISC)`; AWS-LC notices must be reviewed for binary redistribution. | AWS-LC has PQC work, but PQC Bridge must verify stable ML-KEM-768 and ML-DSA-65 API exposure before implementation. | AWS-LC upstream tests plus project KAT manifests if APIs are exposed. | Native system/provider backend; server platforms are the main fit; WASM/mobile are not primary targets. | AWS-maintained project with active releases and enterprise deployment fit. | Rust wrapper may not expose all required PQC APIs; native build and provider boundary are heavier than the Rust-native default; FIPS claims require exact validated-module analysis. | Fail for v0.2 default until stable ML-KEM-768 and ML-DSA-65 API exposure is verified. |
+
+## Decision
+
+PQC Bridge accepts the RustCrypto split provider as the first production backend
+path:
+
+- ML-KEM-768 provider: `ml-kem = 0.3.2`
+- ML-DSA-65 provider: `ml-dsa = 0.1.0`
+- PQC Bridge adapter crate: `pqcb-backend-rustcrypto`
+- Default backend feature: `backend-rustcrypto`
+
+The selected path is a split provider because RustCrypto publishes ML-KEM and
+ML-DSA as separate focused crates. The split must remain private to the backend
+adapter. Public Rust APIs and the C ABI must expose PQC Bridge algorithms,
+keys, buffers, and errors, not RustCrypto provider types.
+
+## Rationale
+
+RustCrypto is the best v0.2 default fit because it satisfies the mandatory
+gates with the smallest integration and distribution risk:
+
+- Both required v0.2 algorithms are available in focused Rust crates.
+- Crates are pinned to exact versions and have `MIT OR Apache-2.0` compatible
+  licensing.
+- The backend can avoid native C build tooling for the default path.
+- The provider API is narrow enough to hide behind `KemBackend` and
+  `SignatureBackend`.
+- Upstream packages include examples and tests for ML-KEM-768 and ML-DSA-65
+  that can seed project KAT manifests.
+
+Rejected candidates:
+
+- liboqs is useful for broad compatibility, but its C dependency graph, broad
+  algorithm surface, and build reproducibility requirements make it a better
+  optional compatibility backend than the first default.
+- rustpq is a plausible backup Rust-native path, but its default SIMD feature
+  behavior and generated/PQClean-derived implementation provenance require more
+  review before default selection.
+- AWS-LC is a strong future enterprise/system backend candidate, but v0.2 must
+  not depend on unverified Rust-level exposure of both ML-KEM-768 and ML-DSA-65
+  APIs.
+
+## Risks
+
+- PQC Bridge has not performed an independent side-channel audit of the selected
+  upstream crates.
+- Selecting RustCrypto does not make PQC Bridge FIPS certified. Any future FIPS
+  statement must identify the validated module, version, operating boundary,
+  and allowed configuration.
+- The ML-DSA crate is early in its version history. Updates require changelog,
+  KAT, and negative-test review.
+- WASM and mobile builds need explicit RNG and target validation before being
+  advertised as supported backend targets.
+- Split-provider integration increases adapter testing requirements because
+  KEM and signature failures come from different upstream APIs.
+
+## Follow-up
+
+- Define the backend crate and feature layout before adding dependencies.
+- Add KAT manifest schema and harness before relying on upstream test vectors.
+- Add length validation before invoking provider APIs.
+- Implement ML-KEM-768 and ML-DSA-65 adapters without exposing provider types.
+- Keep liboqs and AWS-LC as later optional backends behind the same public API.
 
 ## Decision Procedure
 

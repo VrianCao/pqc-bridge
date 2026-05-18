@@ -72,6 +72,10 @@ v0.2 should integrate one default backend for:
 - ML-KEM-768
 - ML-DSA-65
 
+The accepted v0.2 default backend decision is recorded in
+[`RFC 0002`](rfcs/0002-backend-selection.md): RustCrypto `ml-kem` and `ml-dsa`
+behind a private `pqcb-backend-rustcrypto` adapter.
+
 v0.3 should add one optional compatibility backend.
 
 v1.0 should define:

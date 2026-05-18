@@ -7,6 +7,7 @@ Major project decisions are recorded as RFCs in `docs/rfcs/`.
 | ID | Title | Status |
 | --- | --- | --- |
 | [0001](rfcs/0001-project-blueprint.md) | Project Blueprint | Accepted |
+| [0002](rfcs/0002-backend-selection.md) | First Backend Selection Scoring Matrix | Accepted |
 
 ## Decision Rules
 
