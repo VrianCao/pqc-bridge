@@ -6,12 +6,16 @@
 //! `pqcb-core` traits, key containers, and errors.
 
 #[allow(deprecated)]
+use ml_dsa::ExpandedSigningKey;
+use ml_dsa::{Generate, Keypair, MlDsa65, Signature, SigningKey, Verifier, VerifyingKey};
+#[allow(deprecated)]
 use ml_kem::ExpandedKeyEncoding;
 use ml_kem::{Decapsulate, Encapsulate, KeyExport, MlKem768, kem::Kem, kem::TryKeyInit};
 use pqcb_core::{
     Encapsulation, KemAlgorithm, KemBackend, KemKeyPair, KeyAlgorithm, PqcbError, PublicKey,
     Result, SecretKey, SignatureAlgorithm, SignatureBackend, SignatureKeyPair, Verification,
-    validate_kem_ciphertext, validate_kem_public_key, validate_kem_secret_key,
+    validate_kem_ciphertext, validate_kem_public_key, validate_kem_secret_key, validate_signature,
+    validate_signature_public_key, validate_signature_secret_key,
 };
 use zeroize::Zeroizing;
 
@@ -104,39 +108,91 @@ impl SignatureBackend for RustCryptoBackend {
     }
 
     fn keypair(&self) -> Result<SignatureKeyPair> {
-        Err(PqcbError::backend_unavailable(
-            SignatureAlgorithm::MlDsa65.as_str(),
-        ))
+        let secret_key = SigningKey::<MlDsa65>::generate();
+        let public_key = secret_key.verifying_key().encode();
+
+        #[allow(deprecated)]
+        let secret_key = secret_key.expanded_key().to_expanded();
+
+        Ok(SignatureKeyPair {
+            public_key: PublicKey::new(
+                KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
+                public_key.as_slice().to_vec(),
+            ),
+            secret_key: SecretKey::new(
+                KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
+                secret_key.as_slice().to_vec(),
+            ),
+        })
     }
 
-    fn sign(&self, _secret_key: &SecretKey, _message: &[u8]) -> Result<Vec<u8>> {
-        Err(PqcbError::backend_unavailable(
-            SignatureAlgorithm::MlDsa65.as_str(),
-        ))
+    fn sign(&self, secret_key: &SecretKey, message: &[u8]) -> Result<Vec<u8>> {
+        validate_signature_secret_key(SignatureAlgorithm::MlDsa65, secret_key)?;
+
+        let secret_key = expanded_signing_key(secret_key.expose_secret())?;
+        let signature =
+            secret_key
+                .sign_deterministic(message, &[])
+                .map_err(|_| PqcbError::CryptoFailure {
+                    reason: "ML-DSA-65 signing failed",
+                })?;
+
+        Ok(signature.encode().as_slice().to_vec())
     }
 
     fn verify(
         &self,
-        _public_key: &PublicKey,
-        _message: &[u8],
-        _signature: &[u8],
+        public_key: &PublicKey,
+        message: &[u8],
+        signature: &[u8],
     ) -> Result<Verification> {
-        Err(PqcbError::backend_unavailable(
-            SignatureAlgorithm::MlDsa65.as_str(),
-        ))
+        validate_signature_public_key(SignatureAlgorithm::MlDsa65, public_key)?;
+        validate_signature(SignatureAlgorithm::MlDsa65, signature)?;
+
+        let public_key = verifying_key(public_key.as_bytes());
+        let signature =
+            Signature::<MlDsa65>::try_from(signature).map_err(|_| PqcbError::VerificationFailed)?;
+
+        public_key
+            .verify(message, &signature)
+            .map(|()| Verification::Valid)
+            .map_err(|_| PqcbError::VerificationFailed)
     }
+}
+
+fn expanded_signing_key(bytes: &[u8]) -> Result<ExpandedSigningKey<MlDsa65>> {
+    let bytes: ml_dsa::ExpandedSigningKeyBytes<MlDsa65> =
+        bytes.try_into().map_err(|_| PqcbError::CryptoFailure {
+            reason: "invalid ML-DSA-65 secret key",
+        })?;
+
+    std::panic::catch_unwind(|| {
+        #[allow(deprecated)]
+        ExpandedSigningKey::<MlDsa65>::from_expanded(&bytes)
+    })
+    .map_err(|_| PqcbError::CryptoFailure {
+        reason: "invalid ML-DSA-65 secret key",
+    })
+}
+
+fn verifying_key(bytes: &[u8]) -> VerifyingKey<MlDsa65> {
+    let bytes: ml_dsa::EncodedVerifyingKey<MlDsa65> = bytes
+        .try_into()
+        .expect("ML-DSA-65 public key length prevalidated");
+    VerifyingKey::<MlDsa65>::decode(&bytes)
 }
 
 #[cfg(test)]
 mod tests {
     use pqcb_core::{
-        KemAlgorithm, KemBackend, KeyAlgorithm, PqcbError, PublicKey, SecretKey,
-        SignatureAlgorithm, SignatureBackend,
+        KemAlgorithm, KemBackend, KeyAlgorithm, PqcbError, PublicKey, SignatureAlgorithm,
+        SignatureBackend, Verification,
         algorithms::{
+            ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SECRET_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
             ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, ML_KEM_768_SECRET_KEY_LEN,
             ML_KEM_SHARED_SECRET_LEN,
         },
-        decapsulate_checked, encapsulate_checked,
+        decapsulate_checked, encapsulate_checked, sign_checked, verify_checked,
     };
 
     use super::RustCryptoBackend;
@@ -216,28 +272,77 @@ mod tests {
     }
 
     #[test]
-    fn signature_operations_fail_closed_until_adapter_lands() {
+    fn ml_dsa_keypair_returns_canonical_lengths() {
         let backend = RustCryptoBackend::new();
-        let public_key = PublicKey::new(
-            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
-            Vec::new(),
-        );
-        let secret_key = SecretKey::new(
-            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
-            Vec::new(),
-        );
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
 
         assert_eq!(
-            SignatureBackend::keypair(&backend),
-            Err(PqcbError::backend_unavailable("ML-DSA-65"))
+            keypair.public_key.algorithm(),
+            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65)
         );
         assert_eq!(
-            backend.sign(&secret_key, b"message"),
-            Err(PqcbError::backend_unavailable("ML-DSA-65"))
+            keypair.public_key.as_bytes().len(),
+            ML_DSA_65_PUBLIC_KEY_LEN
         );
         assert_eq!(
-            backend.verify(&public_key, b"message", b"signature"),
-            Err(PqcbError::backend_unavailable("ML-DSA-65"))
+            keypair.secret_key.algorithm(),
+            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65)
+        );
+        assert_eq!(
+            keypair.secret_key.expose_secret().len(),
+            ML_DSA_65_SECRET_KEY_LEN
+        );
+    }
+
+    #[test]
+    fn ml_dsa_sign_verify_round_trip() {
+        let backend = RustCryptoBackend::new();
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
+        let signature =
+            sign_checked(&backend, &keypair.secret_key, b"message").expect("sign message");
+        let verification = verify_checked(&backend, &keypair.public_key, b"message", &signature)
+            .expect("verify signature");
+
+        assert_eq!(signature.len(), ML_DSA_65_SIGNATURE_LEN);
+        assert_eq!(verification, Verification::Valid);
+    }
+
+    #[test]
+    fn ml_dsa_tampered_message_fails_verification() {
+        let backend = RustCryptoBackend::new();
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
+        let signature =
+            sign_checked(&backend, &keypair.secret_key, b"message").expect("sign message");
+
+        assert_eq!(
+            verify_checked(&backend, &keypair.public_key, b"tampered", &signature),
+            Err(PqcbError::VerificationFailed)
+        );
+    }
+
+    #[test]
+    fn ml_dsa_wrong_key_fails_verification() {
+        let backend = RustCryptoBackend::new();
+        let signer = SignatureBackend::keypair(&backend).expect("generate signing keypair");
+        let verifier = SignatureBackend::keypair(&backend).expect("generate verifier keypair");
+        let signature =
+            sign_checked(&backend, &signer.secret_key, b"message").expect("sign message");
+
+        assert_eq!(
+            verify_checked(&backend, &verifier.public_key, b"message", &signature),
+            Err(PqcbError::VerificationFailed)
+        );
+    }
+
+    #[test]
+    fn ml_dsa_malformed_signature_fails_closed() {
+        let backend = RustCryptoBackend::new();
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
+        let signature = vec![0; ML_DSA_65_SIGNATURE_LEN];
+
+        assert_eq!(
+            verify_checked(&backend, &keypair.public_key, b"message", &signature),
+            Err(PqcbError::VerificationFailed)
         );
     }
 }
