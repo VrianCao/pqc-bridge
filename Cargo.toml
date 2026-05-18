@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "bindings/wasm",
+  "crates/pqcb-backend-rustcrypto",
   "crates/pqcb-core",
   "crates/pqcb-ffi",
   "crates/pqcb-cli",
@@ -23,6 +24,7 @@ categories = ["cryptography", "api-bindings", "command-line-utilities"]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 pqcb-core = { path = "crates/pqcb-core", version = "0.1.0" }
+pqcb-backend-rustcrypto = { path = "crates/pqcb-backend-rustcrypto", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 zeroize = "1"

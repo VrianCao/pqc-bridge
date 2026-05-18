@@ -1,0 +1,25 @@
+[package]
+name = "pqcb-backend-rustcrypto"
+description = "RustCrypto backend adapter for PQC Bridge."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["std", "getrandom", "zeroize"]
+std = []
+getrandom = []
+zeroize = []
+
+[dependencies]
+pqcb-core.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true
