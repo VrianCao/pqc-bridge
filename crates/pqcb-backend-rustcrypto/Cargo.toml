@@ -23,5 +23,10 @@ ml-kem.workspace = true
 pqcb-core.workspace = true
 zeroize.workspace = true
 
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
 [lints]
 workspace = true
