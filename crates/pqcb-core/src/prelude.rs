@@ -6,3 +6,4 @@ pub use crate::keys::{PublicKey, SecretKey};
 pub use crate::traits::{
     Encapsulation, KemBackend, KemKeyPair, SignatureBackend, SignatureKeyPair, Verification,
 };
+pub use crate::{kem, signature};

@@ -71,6 +71,33 @@ signature.sign(secret_key, message)
 signature.verify(public_key, message, signature)
 ```
 
+`pqcb-core` exposes these modules as provider-neutral fail-closed entrypoints:
+without a backend they validate caller inputs and then return
+`PqcbError::BackendUnavailable`. The default provider crate
+`pqcb-backend-rustcrypto` exposes matching ergonomic modules backed by
+RustCrypto:
+
+```rust
+let kem_keys = pqcb_backend_rustcrypto::kem::keypair()?;
+let encapsulation = pqcb_backend_rustcrypto::kem::encapsulate(&kem_keys.public_key)?;
+let shared = pqcb_backend_rustcrypto::kem::decapsulate(
+    &kem_keys.secret_key,
+    encapsulation.ciphertext(),
+)?;
+
+let signing_keys = pqcb_backend_rustcrypto::signature::keypair()?;
+let signature = pqcb_backend_rustcrypto::signature::sign(
+    &signing_keys.secret_key,
+    b"message",
+)?;
+pqcb_backend_rustcrypto::signature::verify(
+    &signing_keys.public_key,
+    b"message",
+    &signature,
+)?;
+# Ok::<(), pqcb_core::PqcbError>(())
+```
+
 ## Default Algorithms
 
 | API | Default |

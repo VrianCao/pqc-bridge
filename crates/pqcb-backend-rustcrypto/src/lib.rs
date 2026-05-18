@@ -19,6 +19,82 @@ use pqcb_core::{
 };
 use zeroize::Zeroizing;
 
+/// KEM primitive facade backed by the default `RustCrypto` provider.
+pub mod kem {
+    use zeroize::Zeroizing;
+
+    use pqcb_core::{Encapsulation, KemKeyPair, PublicKey, Result, SecretKey};
+
+    use crate::RustCryptoBackend;
+    use pqcb_core::{KemBackend, decapsulate_checked, encapsulate_checked};
+
+    /// Generates an ML-KEM-768 keypair.
+    ///
+    /// # Errors
+    ///
+    /// Returns backend errors if provider key generation fails.
+    pub fn keypair() -> Result<KemKeyPair> {
+        KemBackend::keypair(&RustCryptoBackend::new())
+    }
+
+    /// Encapsulates a shared secret to `public_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation or backend errors.
+    pub fn encapsulate(public_key: &PublicKey) -> Result<Encapsulation> {
+        encapsulate_checked(&RustCryptoBackend::new(), public_key)
+    }
+
+    /// Decapsulates `ciphertext` with `secret_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation or backend errors.
+    pub fn decapsulate(secret_key: &SecretKey, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+        decapsulate_checked(&RustCryptoBackend::new(), secret_key, ciphertext)
+    }
+}
+
+/// Signature primitive facade backed by the default `RustCrypto` provider.
+pub mod signature {
+    use pqcb_core::{PublicKey, Result, SecretKey, SignatureBackend, SignatureKeyPair};
+    use pqcb_core::{Verification, sign_checked, verify_checked};
+
+    use crate::RustCryptoBackend;
+
+    /// Generates an ML-DSA-65 keypair.
+    ///
+    /// # Errors
+    ///
+    /// Returns backend errors if provider key generation fails.
+    pub fn keypair() -> Result<SignatureKeyPair> {
+        SignatureBackend::keypair(&RustCryptoBackend::new())
+    }
+
+    /// Signs `message` with `secret_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation or backend errors.
+    pub fn sign(secret_key: &SecretKey, message: &[u8]) -> Result<Vec<u8>> {
+        sign_checked(&RustCryptoBackend::new(), secret_key, message)
+    }
+
+    /// Verifies `signature` over `message` with `public_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation or backend errors.
+    pub fn verify(
+        public_key: &PublicKey,
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<Verification> {
+        verify_checked(&RustCryptoBackend::new(), public_key, message, signature)
+    }
+}
+
 /// `RustCrypto` backend adapter.
 ///
 /// The type is intentionally provider-neutral at its public boundary. Provider

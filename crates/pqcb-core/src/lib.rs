@@ -8,8 +8,10 @@
 
 pub mod algorithms;
 pub mod errors;
+pub mod kem;
 pub mod keys;
 pub mod prelude;
+pub mod signature;
 pub mod traits;
 pub mod version;
 
