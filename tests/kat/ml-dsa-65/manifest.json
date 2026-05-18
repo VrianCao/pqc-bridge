@@ -1,0 +1,101 @@
+{
+  "schema_version": "1",
+  "algorithm": "ML-DSA",
+  "parameter_set": "ML-DSA-65",
+  "upstream": {
+    "name": "RustCrypto ml-dsa",
+    "repository": "https://github.com/RustCrypto/signatures",
+    "version": "0.1.0"
+  },
+  "source": {
+    "name": "RustCrypto deterministic ML-DSA-65 zero seed fixture",
+    "url": "generated from ml-dsa 0.1.0 SigningKey::from_seed and sign_deterministic APIs",
+    "license": "MIT OR Apache-2.0",
+    "redistribution": "Repository-owned metadata generated from the pinned upstream crate."
+  },
+  "generation": {
+    "method": "project-generated",
+    "command": "SigningKey::<MlDsa65>::from_seed(00*32); sign_deterministic(message, empty context)",
+    "date": "2026-05-18"
+  },
+  "checksum": {
+    "algorithm": "SHA-256",
+    "value": "c552a0b9571d3e0973926bdcdbdd5c842568b0a2f25075a46bdc0bd75591220a"
+  },
+  "cases": [
+    {
+      "id": "ml-dsa-65-zero-seed-keygen",
+      "type": "positive",
+      "operation": "keygen",
+      "expected": "success",
+      "inputs": {
+        "seed_hex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "outputs": {
+        "public_key_sha256": "085ba380ff386dd52e42349c6eb88489d6058ea541a4e3fb0dce9a3fd1f7a911",
+        "secret_key_sha256": "cfcb5e7edf4348f712b7002b0553d28929856936c98e4adf172e51d5c9934262"
+      }
+    },
+    {
+      "id": "ml-dsa-65-zero-seed-sign",
+      "type": "positive",
+      "operation": "sign",
+      "expected": "success",
+      "inputs": {
+        "seed_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "message_hex": "50514320427269646765204d4c2d4453412d3635204b4154"
+      },
+      "outputs": {
+        "signature_sha256": "c552a0b9571d3e0973926bdcdbdd5c842568b0a2f25075a46bdc0bd75591220a"
+      }
+    },
+    {
+      "id": "ml-dsa-65-zero-seed-verify",
+      "type": "positive",
+      "operation": "verify",
+      "expected": "success",
+      "inputs": {
+        "seed_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "message_hex": "50514320427269646765204d4c2d4453412d3635204b4154"
+      },
+      "outputs": {
+        "verification": "valid"
+      }
+    },
+    {
+      "id": "ml-dsa-65-tampered-message",
+      "type": "negative",
+      "operation": "verify",
+      "expected": "verification-failed",
+      "inputs": {
+        "seed_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "message_hex": "74616d7065726564"
+      },
+      "outputs": {}
+    },
+    {
+      "id": "ml-dsa-65-tampered-signature",
+      "type": "negative",
+      "operation": "verify",
+      "expected": "verification-failed",
+      "inputs": {
+        "seed_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "message_hex": "50514320427269646765204d4c2d4453412d3635204b4154",
+        "signature_hex": "00"
+      },
+      "outputs": {}
+    },
+    {
+      "id": "ml-dsa-65-wrong-public-key",
+      "type": "negative",
+      "operation": "verify",
+      "expected": "verification-failed",
+      "inputs": {
+        "seed_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "wrong_seed_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+        "message_hex": "50514320427269646765204d4c2d4453412d3635204b4154"
+      },
+      "outputs": {}
+    }
+  ]
+}
