@@ -18,6 +18,7 @@ pub use errors::{PqcbError, Result};
 pub use keys::{PublicKey, SecretKey};
 pub use traits::{
     Encapsulation, KemBackend, KemKeyPair, SignatureBackend, SignatureKeyPair, Verification,
-    decapsulate_checked, encapsulate_checked, validate_kem_ciphertext, validate_kem_public_key,
-    validate_kem_secret_key,
+    decapsulate_checked, encapsulate_checked, sign_checked, validate_kem_ciphertext,
+    validate_kem_public_key, validate_kem_secret_key, validate_signature,
+    validate_signature_public_key, validate_signature_secret_key, verify_checked,
 };

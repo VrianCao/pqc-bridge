@@ -13,6 +13,12 @@ pub const ML_KEM_768_SECRET_KEY_LEN: usize = 2_400;
 pub const ML_KEM_768_CIPHERTEXT_LEN: usize = 1_088;
 /// ML-KEM shared-secret length in bytes.
 pub const ML_KEM_SHARED_SECRET_LEN: usize = 32;
+/// Raw ML-DSA-65 public key length in bytes.
+pub const ML_DSA_65_PUBLIC_KEY_LEN: usize = 1_952;
+/// Raw ML-DSA-65 secret key length in bytes.
+pub const ML_DSA_65_SECRET_KEY_LEN: usize = 4_032;
+/// Raw ML-DSA-65 signature length in bytes.
+pub const ML_DSA_65_SIGNATURE_LEN: usize = 3_309;
 
 /// Length metadata for a KEM parameter set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -25,6 +31,17 @@ pub struct KemParameters {
     pub ciphertext_len: usize,
     /// Shared-secret length in bytes.
     pub shared_secret_len: usize,
+}
+
+/// Length metadata for a signature parameter set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SignatureParameters {
+    /// Public key length in bytes.
+    pub public_key_len: usize,
+    /// Secret key length in bytes.
+    pub secret_key_len: usize,
+    /// Signature length in bytes.
+    pub signature_len: usize,
 }
 
 /// A post-quantum key encapsulation mechanism.
@@ -88,6 +105,17 @@ impl SignatureAlgorithm {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::MlDsa65 => "ML-DSA-65",
+        }
+    }
+
+    /// Returns canonical byte-length metadata for this signature parameter set.
+    pub const fn parameters(self) -> SignatureParameters {
+        match self {
+            Self::MlDsa65 => SignatureParameters {
+                public_key_len: ML_DSA_65_PUBLIC_KEY_LEN,
+                secret_key_len: ML_DSA_65_SECRET_KEY_LEN,
+                signature_len: ML_DSA_65_SIGNATURE_LEN,
+            },
         }
     }
 }
@@ -179,7 +207,8 @@ impl fmt::Display for KeyAlgorithm {
 #[cfg(test)]
 mod tests {
     use super::{
-        HybridKemAlgorithm, KemAlgorithm, ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN,
+        HybridKemAlgorithm, KemAlgorithm, ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SECRET_KEY_LEN,
+        ML_DSA_65_SIGNATURE_LEN, ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN,
         ML_KEM_768_SECRET_KEY_LEN, ML_KEM_SHARED_SECRET_LEN, SignatureAlgorithm,
     };
 
@@ -219,5 +248,17 @@ mod tests {
         assert_eq!(parameters.secret_key_len, 2_400);
         assert_eq!(parameters.ciphertext_len, 1_088);
         assert_eq!(parameters.shared_secret_len, 32);
+    }
+
+    #[test]
+    fn ml_dsa_65_parameters_match_fips_lengths() {
+        let parameters = SignatureAlgorithm::MlDsa65.parameters();
+
+        assert_eq!(parameters.public_key_len, ML_DSA_65_PUBLIC_KEY_LEN);
+        assert_eq!(parameters.secret_key_len, ML_DSA_65_SECRET_KEY_LEN);
+        assert_eq!(parameters.signature_len, ML_DSA_65_SIGNATURE_LEN);
+        assert_eq!(parameters.public_key_len, 1_952);
+        assert_eq!(parameters.secret_key_len, 4_032);
+        assert_eq!(parameters.signature_len, 3_309);
     }
 }
