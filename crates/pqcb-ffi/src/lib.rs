@@ -5,7 +5,11 @@
 //! once a concrete backend is integrated and covered by KAT/fuzz tests.
 
 use core::ptr;
+use core::slice;
+use std::panic::{self, AssertUnwindSafe};
 
+use pqcb_backend_rustcrypto::kem;
+use pqcb_core::PqcbError;
 use pqcb_core::version::{ABI_VERSION, VERSION};
 
 /// Status code returned by C ABI functions.
@@ -165,6 +169,90 @@ pub unsafe extern "C" fn pqcb_backend_available(
     PqcbStatus::Ok
 }
 
+/// Generates an ML-KEM-768 keypair.
+///
+/// # Safety
+///
+/// `public_key_out` and `secret_key_out` must be valid writable pointers to
+/// `PqcbOwnedBuffer` slots.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_ml_kem_768_keypair(
+    public_key_out: *mut PqcbOwnedBuffer,
+    secret_key_out: *mut PqcbOwnedBuffer,
+) -> PqcbStatus {
+    if public_key_out.is_null() || secret_key_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    clear_output(public_key_out);
+    clear_output(secret_key_out);
+
+    catch_status(|| {
+        let keypair = kem::keypair().map_err(|error| status_from_error(&error))?;
+        write_output(public_key_out, keypair.public_key.into_bytes());
+        write_output(secret_key_out, keypair.secret_key.expose_secret().to_vec());
+        Ok(())
+    })
+}
+
+/// Encapsulates an ML-KEM-768 shared secret.
+///
+/// # Safety
+///
+/// Input buffers must point to readable memory for their declared lengths.
+/// Output pointers must be valid writable `PqcbOwnedBuffer` slots.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_ml_kem_768_encapsulate(
+    public_key: PqcbBuffer,
+    ciphertext_out: *mut PqcbOwnedBuffer,
+    shared_secret_out: *mut PqcbOwnedBuffer,
+) -> PqcbStatus {
+    if ciphertext_out.is_null() || shared_secret_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    clear_output(ciphertext_out);
+    clear_output(shared_secret_out);
+
+    catch_status(|| {
+        let public_key = borrowed(public_key)?;
+        let public_key = kem::public_key(public_key.to_vec());
+        let encapsulation =
+            kem::encapsulate(&public_key).map_err(|error| status_from_error(&error))?;
+        write_output(ciphertext_out, encapsulation.ciphertext().to_vec());
+        write_output(
+            shared_secret_out,
+            encapsulation.expose_shared_secret().to_vec(),
+        );
+        Ok(())
+    })
+}
+
+/// Decapsulates an ML-KEM-768 shared secret.
+///
+/// # Safety
+///
+/// Input buffers must point to readable memory for their declared lengths.
+/// `shared_secret_out` must be a valid writable `PqcbOwnedBuffer` slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_ml_kem_768_decapsulate(
+    secret_key: PqcbBuffer,
+    ciphertext: PqcbBuffer,
+    shared_secret_out: *mut PqcbOwnedBuffer,
+) -> PqcbStatus {
+    if shared_secret_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    clear_output(shared_secret_out);
+
+    catch_status(|| {
+        let secret_key = kem::secret_key(borrowed(secret_key)?.to_vec());
+        let ciphertext = borrowed(ciphertext)?;
+        let shared_secret =
+            kem::decapsulate(&secret_key, ciphertext).map_err(|error| status_from_error(&error))?;
+        write_output(shared_secret_out, shared_secret.to_vec());
+        Ok(())
+    })
+}
+
 /// Frees a library-owned buffer returned by PQC Bridge.
 ///
 /// Passing a null/zero buffer is allowed. Passing a buffer not returned by PQC
@@ -199,6 +287,57 @@ pub fn owned_buffer_from_vec(bytes: Vec<u8>) -> PqcbOwnedBuffer {
     };
     let _leaked = Box::into_raw(boxed);
     buffer
+}
+
+fn borrowed(buffer: PqcbBuffer) -> Result<&'static [u8], PqcbStatus> {
+    if buffer.has_invalid_null() {
+        return Err(PqcbStatus::NullPointer);
+    }
+    if buffer.len == 0 {
+        return Ok(&[]);
+    }
+
+    // SAFETY: callers of FFI functions promise that non-null borrowed buffers
+    // point to readable memory for `len` bytes.
+    Ok(unsafe { slice::from_raw_parts(buffer.data, buffer.len) })
+}
+
+fn clear_output(out: *mut PqcbOwnedBuffer) {
+    // SAFETY: callers checked `out` for null and promise it points to writable
+    // storage for one `PqcbOwnedBuffer`.
+    unsafe {
+        *out = PqcbOwnedBuffer::empty();
+    }
+}
+
+fn write_output(out: *mut PqcbOwnedBuffer, bytes: Vec<u8>) {
+    // SAFETY: callers checked `out` for null and promise it points to writable
+    // storage for one `PqcbOwnedBuffer`.
+    unsafe {
+        *out = owned_buffer_from_vec(bytes);
+    }
+}
+
+fn catch_status(operation: impl FnOnce() -> Result<(), PqcbStatus>) -> PqcbStatus {
+    match panic::catch_unwind(AssertUnwindSafe(operation)) {
+        Ok(Ok(())) => PqcbStatus::Ok,
+        Ok(Err(status)) => status,
+        Err(_) => PqcbStatus::Panic,
+    }
+}
+
+fn status_from_error(error: &PqcbError) -> PqcbStatus {
+    match error {
+        PqcbError::InvalidAlgorithm { .. } => PqcbStatus::InvalidAlgorithm,
+        PqcbError::BackendUnavailable { .. } => PqcbStatus::BackendUnavailable,
+        PqcbError::KeyAlgorithmMismatch { .. } | PqcbError::InvalidLength { .. } => {
+            PqcbStatus::InvalidLength
+        }
+        PqcbError::InvalidEnvelope { .. } | PqcbError::CryptoFailure { .. } => {
+            PqcbStatus::CryptoFailure
+        }
+        PqcbError::VerificationFailed => PqcbStatus::VerificationFailed,
+    }
 }
 
 #[cfg(test)]
@@ -288,6 +427,108 @@ mod tests {
                 len: 0,
             }
             .has_invalid_null()
+        );
+    }
+
+    #[test]
+    fn ml_kem_keypair_encapsulate_decapsulate_round_trip() {
+        let mut public_key = PqcbOwnedBuffer::empty();
+        let mut secret_key = PqcbOwnedBuffer::empty();
+
+        // SAFETY: outputs are valid writable slots.
+        let status = unsafe { pqcb_ml_kem_768_keypair(&raw mut public_key, &raw mut secret_key) };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert_eq!(public_key.len, 1_184);
+        assert_eq!(secret_key.len, 2_400);
+
+        let mut ciphertext = PqcbOwnedBuffer::empty();
+        let mut encapsulated = PqcbOwnedBuffer::empty();
+        // SAFETY: inputs are valid buffers returned above; outputs are valid slots.
+        let status = unsafe {
+            pqcb_ml_kem_768_encapsulate(
+                PqcbBuffer {
+                    data: public_key.data,
+                    len: public_key.len,
+                },
+                &raw mut ciphertext,
+                &raw mut encapsulated,
+            )
+        };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert_eq!(ciphertext.len, 1_088);
+        assert_eq!(encapsulated.len, 32);
+
+        let mut decapsulated = PqcbOwnedBuffer::empty();
+        // SAFETY: inputs are valid buffers returned above; output is a valid slot.
+        let status = unsafe {
+            pqcb_ml_kem_768_decapsulate(
+                PqcbBuffer {
+                    data: secret_key.data,
+                    len: secret_key.len,
+                },
+                PqcbBuffer {
+                    data: ciphertext.data,
+                    len: ciphertext.len,
+                },
+                &raw mut decapsulated,
+            )
+        };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert_eq!(decapsulated.len, 32);
+
+        // SAFETY: buffers were allocated by PQC Bridge and remain valid until freed below.
+        let encapsulated_secret =
+            unsafe { slice::from_raw_parts(encapsulated.data, encapsulated.len) };
+        let decapsulated_secret =
+            unsafe { slice::from_raw_parts(decapsulated.data, decapsulated.len) };
+        assert_eq!(encapsulated_secret, decapsulated_secret);
+
+        pqcb_buffer_free(public_key);
+        pqcb_buffer_free(secret_key);
+        pqcb_buffer_free(ciphertext);
+        pqcb_buffer_free(encapsulated);
+        pqcb_buffer_free(decapsulated);
+    }
+
+    #[test]
+    fn ml_kem_rejects_null_and_invalid_length() {
+        let mut out = PqcbOwnedBuffer::empty();
+        let public_key = [0_u8; 1_183];
+
+        // SAFETY: output is valid; input points to a stack buffer.
+        let status = unsafe {
+            pqcb_ml_kem_768_encapsulate(
+                PqcbBuffer {
+                    data: public_key.as_ptr(),
+                    len: public_key.len(),
+                },
+                &raw mut out,
+                ptr::null_mut(),
+            )
+        };
+        assert_eq!(status, PqcbStatus::NullPointer);
+
+        let mut ciphertext = PqcbOwnedBuffer::empty();
+        let mut shared_secret = PqcbOwnedBuffer::empty();
+        // SAFETY: outputs are valid; input points to a stack buffer.
+        let status = unsafe {
+            pqcb_ml_kem_768_encapsulate(
+                PqcbBuffer {
+                    data: public_key.as_ptr(),
+                    len: public_key.len(),
+                },
+                &raw mut ciphertext,
+                &raw mut shared_secret,
+            )
+        };
+        assert_eq!(status, PqcbStatus::InvalidLength);
+    }
+
+    #[test]
+    fn backend_unavailable_maps_to_status() {
+        assert_eq!(
+            status_from_error(&PqcbError::backend_unavailable("ML-KEM-768")),
+            PqcbStatus::BackendUnavailable
         );
     }
 }

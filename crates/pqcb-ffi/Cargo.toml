@@ -15,6 +15,7 @@ categories.workspace = true
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+pqcb-backend-rustcrypto.workspace = true
 pqcb-core.workspace = true
 
 [lints]

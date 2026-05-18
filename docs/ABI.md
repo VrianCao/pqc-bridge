@@ -109,6 +109,13 @@ Unknown algorithm IDs return `PQCB_STATUS_INVALID_ALGORITHM`.
 - Callers must not mutate borrowed input memory while a function is executing.
 - The ABI does not retain borrowed input pointers after a function returns.
 
+### Sanitizer Plan
+
+AddressSanitizer is not yet wired into CI. Until the sanitizer job lands, each
+primitive ABI task must include null-pointer, invalid-length, success, and
+free-path tests. A future hardening task should add an ASan/UBSan C harness for
+`pqcb_buffer_free` and every primitive ABI entrypoint before v1.0.
+
 ### Binding Implications
 
 - Bindings should wrap `PqcbOwnedBuffer` in language-native finalizers or
