@@ -75,9 +75,35 @@ enum Command {
     /// Open a sealed message.
     Open,
     /// Sign a message.
-    Sign,
+    Sign {
+        /// Signature algorithm name.
+        #[arg(long)]
+        algorithm: String,
+        /// Path to raw secret key bytes.
+        #[arg(long)]
+        secret_key: PathBuf,
+        /// Path to message bytes.
+        #[arg(long)]
+        message: PathBuf,
+        /// Path to write signature bytes.
+        #[arg(long)]
+        signature_out: PathBuf,
+    },
     /// Verify a message signature.
-    Verify,
+    Verify {
+        /// Signature algorithm name.
+        #[arg(long)]
+        algorithm: String,
+        /// Path to raw public key bytes.
+        #[arg(long)]
+        public_key: PathBuf,
+        /// Path to message bytes.
+        #[arg(long)]
+        message: PathBuf,
+        /// Path to raw signature bytes.
+        #[arg(long)]
+        signature: PathBuf,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -131,7 +157,23 @@ fn main() -> Result<()> {
         } => {
             run_decapsulate(&algorithm, &secret_key, &ciphertext, &shared_secret_out)?;
         }
-        Command::Seal | Command::Open | Command::Sign | Command::Verify => {
+        Command::Sign {
+            algorithm,
+            secret_key,
+            message,
+            signature_out,
+        } => {
+            run_sign(&algorithm, &secret_key, &message, &signature_out)?;
+        }
+        Command::Verify {
+            algorithm,
+            public_key,
+            message,
+            signature,
+        } => {
+            run_verify(&algorithm, &public_key, &message, &signature)?;
+        }
+        Command::Seal | Command::Open => {
             bail!("cryptographic backend is not configured in v0.1 scaffold")
         }
     }
@@ -227,6 +269,46 @@ fn run_decapsulate(
     Ok(())
 }
 
+fn run_sign(
+    algorithm: &str,
+    secret_key: &Path,
+    message: &Path,
+    signature_out: &Path,
+) -> Result<()> {
+    let algorithm = algorithm.parse::<SignatureAlgorithm>()?;
+    if algorithm != SignatureAlgorithm::MlDsa65 {
+        bail!("unsupported signature algorithm: {algorithm}");
+    }
+
+    let secret_key = signature::secret_key(read_file(secret_key)?);
+    let message = read_file(message)?;
+    let signature_bytes = signature::sign(&secret_key, &message)?;
+    write_file(signature_out, &signature_bytes)?;
+    println!("wrote signature: {}", signature_out.display());
+
+    Ok(())
+}
+
+fn run_verify(
+    algorithm: &str,
+    public_key: &Path,
+    message: &Path,
+    signature_path: &Path,
+) -> Result<()> {
+    let algorithm = algorithm.parse::<SignatureAlgorithm>()?;
+    if algorithm != SignatureAlgorithm::MlDsa65 {
+        bail!("unsupported signature algorithm: {algorithm}");
+    }
+
+    let public_key = signature::public_key(read_file(public_key)?);
+    let message = read_file(message)?;
+    let signature_bytes = read_file(signature_path)?;
+    signature::verify(&public_key, &message, &signature_bytes)?;
+    println!("signature valid");
+
+    Ok(())
+}
+
 fn read_file(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).with_context(|| format!("read {}", path.display()))
 }
@@ -262,6 +344,27 @@ mod tests {
             fs::read(encapsulated_secret).expect("read encapsulated secret"),
             fs::read(decapsulated_secret).expect("read decapsulated secret")
         );
+    }
+
+    #[test]
+    fn ml_dsa_cli_smoke_sign_verify_and_tamper() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let public_key = dir.join("dsa.pub");
+        let secret_key = dir.join("dsa.sec");
+        let message = dir.join("message.txt");
+        let tampered = dir.join("tampered.txt");
+        let signature = dir.join("message.sig");
+
+        fs::write(&message, b"message").expect("write message");
+        fs::write(&tampered, b"tampered").expect("write tampered message");
+
+        run_keygen(KeyKind::Signature, "ML-DSA-65", &public_key, &secret_key).expect("keygen");
+        run_sign("ML-DSA-65", &secret_key, &message, &signature).expect("sign");
+        run_verify("ML-DSA-65", &public_key, &message, &signature).expect("verify");
+
+        assert!(run_verify("ML-DSA-65", &public_key, &tampered, &signature).is_err());
     }
 
     fn temp_dir() -> PathBuf {
