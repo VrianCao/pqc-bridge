@@ -58,3 +58,26 @@ The internal envelope should remain available for SDK-native workflows.
 - File permissions should be restrictive by default.
 - CLI output must not print secret material unless explicitly requested.
 - Bindings must document runtime-specific memory limitations.
+
+## v0.2 CLI Smoke Formats
+
+The v0.2 CLI smoke commands write raw primitive bytes to explicit file paths.
+They are intended for backend smoke testing, not stable interchange.
+
+```sh
+pqcb keygen --kind kem --algorithm ML-KEM-768 \
+  --public-out kem.pub --secret-out kem.sec
+
+pqcb encapsulate --algorithm ML-KEM-768 \
+  --public-key kem.pub \
+  --ciphertext-out kem.ct \
+  --shared-secret-out kem.ss.enc
+
+pqcb decapsulate --algorithm ML-KEM-768 \
+  --secret-key kem.sec \
+  --ciphertext kem.ct \
+  --shared-secret-out kem.ss.dec
+```
+
+Secret keys and shared secrets are never printed by these commands. They are
+written only to the explicit file targets supplied by the caller.

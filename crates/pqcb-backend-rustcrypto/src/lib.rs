@@ -54,6 +54,16 @@ pub mod kem {
     pub fn decapsulate(secret_key: &SecretKey, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
         decapsulate_checked(&RustCryptoBackend::new(), secret_key, ciphertext)
     }
+
+    /// Creates an ML-KEM-768 public key from raw bytes.
+    pub fn public_key(material: impl Into<Vec<u8>>) -> PublicKey {
+        pqcb_core::kem::public_key(material)
+    }
+
+    /// Creates an ML-KEM-768 secret key from raw bytes.
+    pub fn secret_key(material: impl Into<Vec<u8>>) -> SecretKey {
+        pqcb_core::kem::secret_key(material)
+    }
 }
 
 /// Signature primitive facade backed by the default `RustCrypto` provider.
