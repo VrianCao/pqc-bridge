@@ -23,6 +23,9 @@ PQC Bridge should be held to infrastructure-level quality before stable release.
 - no secret-dependent parsing shortcuts
 - no downgrade without explicit caller consent
 - no undocumented algorithm aliases
+- KAT manifests include source, algorithm, parameter set, upstream version,
+  generation method, license or redistribution terms, checksum, and positive
+  and negative expected-result metadata
 
 ## Binding Checks
 
