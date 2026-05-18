@@ -18,6 +18,7 @@ getrandom = []
 zeroize = []
 
 [dependencies]
+ml-kem.workspace = true
 pqcb-core.workspace = true
 zeroize.workspace = true
 
