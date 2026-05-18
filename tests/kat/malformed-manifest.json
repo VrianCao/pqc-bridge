@@ -1,0 +1,25 @@
+{
+  "schema_version": "1",
+  "algorithm": "ML-KEM",
+  "parameter_set": "ML-KEM-768",
+  "upstream": {
+    "name": "Malformed fixture",
+    "repository": "https://example.invalid/repository",
+    "version": "0.0.0"
+  },
+  "source": {
+    "name": "Malformed fixture",
+    "url": "tests/kat/malformed-manifest.json",
+    "license": "MIT OR Apache-2.0",
+    "redistribution": "Repository-owned malformed fixture."
+  },
+  "generation": {
+    "method": "project-generated",
+    "command": "manual malformed fixture",
+    "date": "2026-05-18"
+  },
+  "checksum": {
+    "algorithm": "SHA-256",
+    "value": "0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}
