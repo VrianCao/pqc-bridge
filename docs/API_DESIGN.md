@@ -98,6 +98,26 @@ pqcb_backend_rustcrypto::signature::verify(
 # Ok::<(), pqcb_core::PqcbError>(())
 ```
 
+The v0.2 CLI mirrors these primitive operations for smoke testing:
+
+```sh
+pqcb keygen --kind signature --algorithm ML-DSA-65 \
+  --public-out dsa.pub --secret-out dsa.sec
+
+pqcb sign --algorithm ML-DSA-65 \
+  --secret-key dsa.sec \
+  --message message.bin \
+  --signature-out message.sig
+
+pqcb verify --algorithm ML-DSA-65 \
+  --public-key dsa.pub \
+  --message message.bin \
+  --signature message.sig
+```
+
+`verify` exits successfully only for a valid signature over the supplied message
+and public key. Verification failure is returned as a non-zero command result.
+
 ## Default Algorithms
 
 | API | Default |

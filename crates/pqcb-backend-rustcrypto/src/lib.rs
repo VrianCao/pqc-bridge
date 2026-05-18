@@ -103,6 +103,16 @@ pub mod signature {
     ) -> Result<Verification> {
         verify_checked(&RustCryptoBackend::new(), public_key, message, signature)
     }
+
+    /// Creates an ML-DSA-65 public key from raw bytes.
+    pub fn public_key(material: impl Into<Vec<u8>>) -> PublicKey {
+        pqcb_core::signature::public_key(material)
+    }
+
+    /// Creates an ML-DSA-65 secret key from raw bytes.
+    pub fn secret_key(material: impl Into<Vec<u8>>) -> SecretKey {
+        pqcb_core::signature::secret_key(material)
+    }
 }
 
 /// `RustCrypto` backend adapter.
