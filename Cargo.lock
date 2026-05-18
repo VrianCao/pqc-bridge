@@ -132,6 +132,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqcb-backend-rustcrypto"
+version = "0.1.0"
+dependencies = [
+ "pqcb-core",
+ "zeroize",
+]
+
+[[package]]
 name = "pqcb-core"
 version = "0.1.0"
 dependencies = [
