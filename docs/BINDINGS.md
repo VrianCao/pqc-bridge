@@ -23,6 +23,14 @@ Bindings must not:
 - expose secret material through string conversion or debug output
 - silently downgrade algorithms
 
+## ABI Ownership Expectations
+
+Bindings must treat C ABI inputs as caller-owned borrowed buffers and outputs as
+library-owned buffers that require `pqcb_buffer_free`. A binding may copy output
+bytes into a language-owned object, but it must free the original ABI buffer
+after the copy. Verification failure must remain distinct from transport,
+allocation, and provider errors.
+
 ## Priority
 
 1. Node.js
