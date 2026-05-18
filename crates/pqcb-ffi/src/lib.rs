@@ -57,6 +57,16 @@ pub struct PqcbOwnedBuffer {
     pub len: usize,
 }
 
+/// Stable C ABI algorithm identifiers.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PqcbAlgorithm {
+    /// ML-KEM-768.
+    MlKem768 = 1,
+    /// ML-DSA-65.
+    MlDsa65 = 2,
+}
+
 impl PqcbOwnedBuffer {
     /// Returns an empty owned buffer.
     pub const fn empty() -> Self {
@@ -83,6 +93,18 @@ pub struct PqcbVersion {
 #[unsafe(no_mangle)]
 pub extern "C" fn pqcb_abi_version() -> u32 {
     ABI_VERSION
+}
+
+/// Returns the current C ABI major version.
+#[unsafe(no_mangle)]
+pub extern "C" fn pqcb_abi_version_major() -> u16 {
+    u16::try_from(ABI_VERSION).unwrap_or(u16::MAX)
+}
+
+/// Returns the current C ABI minor version.
+#[unsafe(no_mangle)]
+pub extern "C" fn pqcb_abi_version_minor() -> u16 {
+    0
 }
 
 /// Returns the current PQC Bridge crate version.
@@ -113,6 +135,34 @@ pub extern "C" fn pqcb_status_message(status: PqcbStatus) -> *const core::ffi::c
         PqcbStatus::Panic => c"panic caught at FFI boundary",
     }
     .as_ptr()
+}
+
+/// Reports whether a backend is available for `algorithm_id`.
+///
+/// # Safety
+///
+/// `available` must be a valid writable pointer to a `bool`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_backend_available(
+    algorithm_id: u32,
+    available: *mut bool,
+) -> PqcbStatus {
+    if available.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+
+    let is_available = match algorithm_id {
+        id if id == PqcbAlgorithm::MlKem768 as u32 => true,
+        id if id == PqcbAlgorithm::MlDsa65 as u32 => true,
+        _ => return PqcbStatus::InvalidAlgorithm,
+    };
+
+    // SAFETY: caller provided a non-null writable bool pointer per function contract.
+    unsafe {
+        *available = is_available;
+    }
+
+    PqcbStatus::Ok
 }
 
 /// Frees a library-owned buffer returned by PQC Bridge.
@@ -164,6 +214,49 @@ mod tests {
         // SAFETY: `pqcb_status_message` returns a static nul-terminated string.
         let message = unsafe { CStr::from_ptr(message) };
         assert_eq!(message.to_str(), Ok("invalid length"));
+    }
+
+    #[test]
+    fn abi_major_minor_are_available() {
+        assert_eq!(pqcb_abi_version(), 1);
+        assert_eq!(pqcb_abi_version_major(), 1);
+        assert_eq!(pqcb_abi_version_minor(), 0);
+    }
+
+    #[test]
+    fn backend_availability_reports_supported_algorithms() {
+        let mut available = false;
+
+        // SAFETY: `available` is a valid writable bool pointer.
+        let status =
+            unsafe { pqcb_backend_available(PqcbAlgorithm::MlKem768 as u32, &raw mut available) };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert!(available);
+
+        available = false;
+        // SAFETY: `available` is a valid writable bool pointer.
+        let status =
+            unsafe { pqcb_backend_available(PqcbAlgorithm::MlDsa65 as u32, &raw mut available) };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert!(available);
+    }
+
+    #[test]
+    fn backend_availability_rejects_unknown_algorithm() {
+        let mut available = false;
+
+        // SAFETY: `available` is a valid writable bool pointer.
+        let status = unsafe { pqcb_backend_available(999, &raw mut available) };
+        assert_eq!(status, PqcbStatus::InvalidAlgorithm);
+        assert!(!available);
+    }
+
+    #[test]
+    fn backend_availability_rejects_null_output() {
+        // SAFETY: null pointer is intentionally tested and must be rejected.
+        let status =
+            unsafe { pqcb_backend_available(PqcbAlgorithm::MlKem768 as u32, ptr::null_mut()) };
+        assert_eq!(status, PqcbStatus::NullPointer);
     }
 
     #[test]

@@ -2,6 +2,7 @@
 #define PQCB_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -35,9 +36,17 @@ typedef struct PqcbOwnedBuffer {
   size_t len;
 } PqcbOwnedBuffer;
 
+typedef enum PqcbAlgorithm {
+  PQCB_ALGORITHM_ML_KEM_768 = 1,
+  PQCB_ALGORITHM_ML_DSA_65 = 2
+} PqcbAlgorithm;
+
 uint32_t pqcb_abi_version(void);
+uint16_t pqcb_abi_version_major(void);
+uint16_t pqcb_abi_version_minor(void);
 PqcbVersion pqcb_version(void);
 const char *pqcb_status_message(PqcbStatus status);
+PqcbStatus pqcb_backend_available(uint32_t algorithm_id, bool *available);
 void pqcb_buffer_free(PqcbOwnedBuffer buffer);
 
 #ifdef __cplusplus

@@ -87,6 +87,8 @@ operations:
 | Function | Meaning |
 | --- | --- |
 | `pqcb_abi_version` | Packed ABI version for compatibility checks. |
+| `pqcb_abi_version_major` | ABI major version for breaking-change checks. |
+| `pqcb_abi_version_minor` | ABI minor version for additive capability checks. |
 | `pqcb_version` | PQC Bridge package semantic version. |
 | `pqcb_backend_available(algorithm_id)` | Returns whether the current build can execute the requested primitive. |
 
