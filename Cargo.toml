@@ -26,6 +26,7 @@ clap = { version = "4", features = ["derive"] }
 pqcb-core = { path = "crates/pqcb-core", version = "0.1.0" }
 pqcb-backend-rustcrypto = { path = "crates/pqcb-backend-rustcrypto", version = "0.1.0" }
 ml-kem = { version = "=0.3.2", features = ["getrandom", "zeroize"] }
+ml-dsa = { version = "=0.1.0", default-features = false, features = ["alloc", "getrandom", "zeroize"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
