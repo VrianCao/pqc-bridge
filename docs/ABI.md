@@ -36,14 +36,15 @@ typedef enum PqcbStatus {
 
 typedef struct PqcbBuffer {
   const uint8_t *data;
-  uintptr_t len;
+  size_t len;
 } PqcbBuffer;
 
 typedef struct PqcbOwnedBuffer {
   uint8_t *data;
-  uintptr_t len;
+  size_t len;
 } PqcbOwnedBuffer;
 
+const char *pqcb_status_message(PqcbStatus status);
 void pqcb_buffer_free(PqcbOwnedBuffer buffer);
 ```
 

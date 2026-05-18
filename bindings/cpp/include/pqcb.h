@@ -1,6 +1,7 @@
 #ifndef PQCB_H
 #define PQCB_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -13,20 +14,31 @@ typedef struct PqcbVersion {
   uint16_t patch;
 } PqcbVersion;
 
-/*
- * v0.2 ABI plan:
- * - Caller-owned inputs use PqcbBuffer.
- * - Library-owned outputs use PqcbOwnedBuffer and must be released with
- *   pqcb_buffer_free.
- * - Primitive functions return PqcbStatus and never unwind across the C
- *   boundary.
- *
- * Concrete buffer/result structs and primitive function declarations are added
- * with the v0.2 implementation tasks that follow docs/ABI.md.
- */
+typedef enum PqcbStatus {
+  PQCB_STATUS_OK = 0,
+  PQCB_STATUS_NULL_POINTER = 1,
+  PQCB_STATUS_INVALID_LENGTH = 2,
+  PQCB_STATUS_INVALID_ALGORITHM = 3,
+  PQCB_STATUS_BACKEND_UNAVAILABLE = 4,
+  PQCB_STATUS_VERIFICATION_FAILED = 5,
+  PQCB_STATUS_CRYPTO_FAILURE = 6,
+  PQCB_STATUS_PANIC = 255
+} PqcbStatus;
+
+typedef struct PqcbBuffer {
+  const uint8_t *data;
+  size_t len;
+} PqcbBuffer;
+
+typedef struct PqcbOwnedBuffer {
+  uint8_t *data;
+  size_t len;
+} PqcbOwnedBuffer;
 
 uint32_t pqcb_abi_version(void);
 PqcbVersion pqcb_version(void);
+const char *pqcb_status_message(PqcbStatus status);
+void pqcb_buffer_free(PqcbOwnedBuffer buffer);
 
 #ifdef __cplusplus
 }
