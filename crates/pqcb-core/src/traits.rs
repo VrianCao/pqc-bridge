@@ -4,8 +4,8 @@ use core::fmt;
 
 use zeroize::Zeroizing;
 
-use crate::algorithms::{KemAlgorithm, SignatureAlgorithm};
-use crate::errors::Result;
+use crate::algorithms::{KemAlgorithm, KeyAlgorithm, SignatureAlgorithm};
+use crate::errors::{PqcbError, Result};
 use crate::keys::{PublicKey, SecretKey};
 
 /// Public and secret key pair returned by KEM backends.
@@ -98,6 +98,113 @@ pub trait KemBackend: Send + Sync {
     fn decapsulate(&self, secret_key: &SecretKey, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>>;
 }
 
+/// Validates a KEM public key before invoking a backend.
+///
+/// # Errors
+///
+/// Returns `KeyAlgorithmMismatch` or `InvalidLength` when the key is not usable
+/// with the requested algorithm.
+pub fn validate_kem_public_key(algorithm: KemAlgorithm, public_key: &PublicKey) -> Result<()> {
+    let expected = KeyAlgorithm::Kem(algorithm);
+    if public_key.algorithm() != expected {
+        return Err(PqcbError::KeyAlgorithmMismatch {
+            expected: expected.as_str(),
+            actual: public_key.algorithm().as_str(),
+        });
+    }
+
+    let expected_len = algorithm.parameters().public_key_len;
+    let actual_len = public_key.as_bytes().len();
+    if actual_len != expected_len {
+        return Err(PqcbError::invalid_length(
+            "ml_kem_768.public_key",
+            expected_len,
+            actual_len,
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates a KEM secret key before invoking a backend.
+///
+/// # Errors
+///
+/// Returns `KeyAlgorithmMismatch` or `InvalidLength` when the key is not usable
+/// with the requested algorithm.
+pub fn validate_kem_secret_key(algorithm: KemAlgorithm, secret_key: &SecretKey) -> Result<()> {
+    let expected = KeyAlgorithm::Kem(algorithm);
+    if secret_key.algorithm() != expected {
+        return Err(PqcbError::KeyAlgorithmMismatch {
+            expected: expected.as_str(),
+            actual: secret_key.algorithm().as_str(),
+        });
+    }
+
+    let expected_len = algorithm.parameters().secret_key_len;
+    let actual_len = secret_key.expose_secret().len();
+    if actual_len != expected_len {
+        return Err(PqcbError::invalid_length(
+            "ml_kem_768.secret_key",
+            expected_len,
+            actual_len,
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates a KEM ciphertext before invoking a backend.
+///
+/// # Errors
+///
+/// Returns `InvalidLength` when the ciphertext length is not canonical for the
+/// requested algorithm.
+pub fn validate_kem_ciphertext(algorithm: KemAlgorithm, ciphertext: &[u8]) -> Result<()> {
+    let expected_len = algorithm.parameters().ciphertext_len;
+    let actual_len = ciphertext.len();
+    if actual_len != expected_len {
+        return Err(PqcbError::invalid_length(
+            "ml_kem_768.ciphertext",
+            expected_len,
+            actual_len,
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates inputs and then invokes backend encapsulation.
+///
+/// # Errors
+///
+/// Returns validation errors before backend invocation, or backend errors after
+/// validation succeeds.
+pub fn encapsulate_checked(
+    backend: &impl KemBackend,
+    public_key: &PublicKey,
+) -> Result<Encapsulation> {
+    validate_kem_public_key(backend.algorithm(), public_key)?;
+    backend.encapsulate(public_key)
+}
+
+/// Validates inputs and then invokes backend decapsulation.
+///
+/// # Errors
+///
+/// Returns validation errors before backend invocation, or backend errors after
+/// validation succeeds.
+pub fn decapsulate_checked(
+    backend: &impl KemBackend,
+    secret_key: &SecretKey,
+    ciphertext: &[u8],
+) -> Result<Zeroizing<Vec<u8>>> {
+    let algorithm = backend.algorithm();
+    validate_kem_secret_key(algorithm, secret_key)?;
+    validate_kem_ciphertext(algorithm, ciphertext)?;
+    backend.decapsulate(secret_key, ciphertext)
+}
+
 /// Interface implemented by ML-DSA capable backends.
 pub trait SignatureBackend: Send + Sync {
     /// Returns the signature algorithm this backend implements.
@@ -130,4 +237,117 @@ pub trait SignatureBackend: Send + Sync {
         message: &[u8],
         signature: &[u8],
     ) -> Result<Verification>;
+}
+
+#[cfg(test)]
+mod tests {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::algorithms::{
+        ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, ML_KEM_768_SECRET_KEY_LEN,
+    };
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct SpyKemBackend {
+        encapsulate_calls: AtomicUsize,
+        decapsulate_calls: AtomicUsize,
+    }
+
+    impl SpyKemBackend {
+        fn new() -> Self {
+            Self {
+                encapsulate_calls: AtomicUsize::new(0),
+                decapsulate_calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl KemBackend for SpyKemBackend {
+        fn algorithm(&self) -> KemAlgorithm {
+            KemAlgorithm::MlKem768
+        }
+
+        fn keypair(&self) -> Result<KemKeyPair> {
+            Err(PqcbError::backend_unavailable("ML-KEM-768"))
+        }
+
+        fn encapsulate(&self, _public_key: &PublicKey) -> Result<Encapsulation> {
+            self.encapsulate_calls.fetch_add(1, Ordering::SeqCst);
+            Err(PqcbError::CryptoFailure {
+                reason: "spy encapsulate",
+            })
+        }
+
+        fn decapsulate(
+            &self,
+            _secret_key: &SecretKey,
+            _ciphertext: &[u8],
+        ) -> Result<Zeroizing<Vec<u8>>> {
+            self.decapsulate_calls.fetch_add(1, Ordering::SeqCst);
+            Err(PqcbError::CryptoFailure {
+                reason: "spy decapsulate",
+            })
+        }
+    }
+
+    #[test]
+    fn ml_kem_invalid_public_key_length_fails_before_backend_call() {
+        let backend = SpyKemBackend::new();
+        let public_key = PublicKey::new(
+            KeyAlgorithm::Kem(KemAlgorithm::MlKem768),
+            vec![0; ML_KEM_768_PUBLIC_KEY_LEN - 1],
+        );
+
+        assert_eq!(
+            encapsulate_checked(&backend, &public_key),
+            Err(PqcbError::invalid_length(
+                "ml_kem_768.public_key",
+                ML_KEM_768_PUBLIC_KEY_LEN,
+                ML_KEM_768_PUBLIC_KEY_LEN - 1,
+            ))
+        );
+        assert_eq!(backend.encapsulate_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ml_kem_invalid_secret_key_length_fails_before_backend_call() {
+        let backend = SpyKemBackend::new();
+        let secret_key = SecretKey::new(
+            KeyAlgorithm::Kem(KemAlgorithm::MlKem768),
+            vec![0; ML_KEM_768_SECRET_KEY_LEN - 1],
+        );
+        let ciphertext = vec![0; ML_KEM_768_CIPHERTEXT_LEN];
+
+        assert_eq!(
+            decapsulate_checked(&backend, &secret_key, &ciphertext),
+            Err(PqcbError::invalid_length(
+                "ml_kem_768.secret_key",
+                ML_KEM_768_SECRET_KEY_LEN,
+                ML_KEM_768_SECRET_KEY_LEN - 1,
+            ))
+        );
+        assert_eq!(backend.decapsulate_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ml_kem_invalid_ciphertext_length_fails_before_backend_call() {
+        let backend = SpyKemBackend::new();
+        let secret_key = SecretKey::new(
+            KeyAlgorithm::Kem(KemAlgorithm::MlKem768),
+            vec![0; ML_KEM_768_SECRET_KEY_LEN],
+        );
+        let ciphertext = vec![0; ML_KEM_768_CIPHERTEXT_LEN - 1];
+
+        assert_eq!(
+            decapsulate_checked(&backend, &secret_key, &ciphertext),
+            Err(PqcbError::invalid_length(
+                "ml_kem_768.ciphertext",
+                ML_KEM_768_CIPHERTEXT_LEN,
+                ML_KEM_768_CIPHERTEXT_LEN - 1,
+            ))
+        );
+        assert_eq!(backend.decapsulate_calls.load(Ordering::SeqCst), 0);
+    }
 }

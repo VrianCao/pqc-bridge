@@ -73,4 +73,13 @@ impl PqcbError {
     pub const fn backend_unavailable(algorithm: &'static str) -> Self {
         Self::BackendUnavailable { algorithm }
     }
+
+    /// Creates an invalid-length error.
+    pub const fn invalid_length(field: &'static str, expected: usize, actual: usize) -> Self {
+        Self::InvalidLength {
+            field,
+            expected,
+            actual,
+        }
+    }
 }

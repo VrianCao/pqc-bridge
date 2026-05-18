@@ -5,6 +5,28 @@ use core::str::FromStr;
 
 use crate::errors::PqcbError;
 
+/// Raw ML-KEM-768 public key length in bytes.
+pub const ML_KEM_768_PUBLIC_KEY_LEN: usize = 1_184;
+/// Raw ML-KEM-768 secret key length in bytes.
+pub const ML_KEM_768_SECRET_KEY_LEN: usize = 2_400;
+/// Raw ML-KEM-768 ciphertext length in bytes.
+pub const ML_KEM_768_CIPHERTEXT_LEN: usize = 1_088;
+/// ML-KEM shared-secret length in bytes.
+pub const ML_KEM_SHARED_SECRET_LEN: usize = 32;
+
+/// Length metadata for a KEM parameter set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KemParameters {
+    /// Public key length in bytes.
+    pub public_key_len: usize,
+    /// Secret key length in bytes.
+    pub secret_key_len: usize,
+    /// Ciphertext length in bytes.
+    pub ciphertext_len: usize,
+    /// Shared-secret length in bytes.
+    pub shared_secret_len: usize,
+}
+
 /// A post-quantum key encapsulation mechanism.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
@@ -18,6 +40,18 @@ impl KemAlgorithm {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::MlKem768 => "ML-KEM-768",
+        }
+    }
+
+    /// Returns canonical byte-length metadata for this KEM parameter set.
+    pub const fn parameters(self) -> KemParameters {
+        match self {
+            Self::MlKem768 => KemParameters {
+                public_key_len: ML_KEM_768_PUBLIC_KEY_LEN,
+                secret_key_len: ML_KEM_768_SECRET_KEY_LEN,
+                ciphertext_len: ML_KEM_768_CIPHERTEXT_LEN,
+                shared_secret_len: ML_KEM_SHARED_SECRET_LEN,
+            },
         }
     }
 }
@@ -144,7 +178,10 @@ impl fmt::Display for KeyAlgorithm {
 
 #[cfg(test)]
 mod tests {
-    use super::{HybridKemAlgorithm, KemAlgorithm, SignatureAlgorithm};
+    use super::{
+        HybridKemAlgorithm, KemAlgorithm, ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN,
+        ML_KEM_768_SECRET_KEY_LEN, ML_KEM_SHARED_SECRET_LEN, SignatureAlgorithm,
+    };
 
     #[test]
     fn accepts_canonical_and_legacy_algorithm_names() {
@@ -168,5 +205,19 @@ mod tests {
             "x25519mlkem768".parse::<HybridKemAlgorithm>(),
             Ok(HybridKemAlgorithm::X25519MlKem768)
         );
+    }
+
+    #[test]
+    fn ml_kem_768_parameters_match_fips_lengths() {
+        let parameters = KemAlgorithm::MlKem768.parameters();
+
+        assert_eq!(parameters.public_key_len, ML_KEM_768_PUBLIC_KEY_LEN);
+        assert_eq!(parameters.secret_key_len, ML_KEM_768_SECRET_KEY_LEN);
+        assert_eq!(parameters.ciphertext_len, ML_KEM_768_CIPHERTEXT_LEN);
+        assert_eq!(parameters.shared_secret_len, ML_KEM_SHARED_SECRET_LEN);
+        assert_eq!(parameters.public_key_len, 1_184);
+        assert_eq!(parameters.secret_key_len, 2_400);
+        assert_eq!(parameters.ciphertext_len, 1_088);
+        assert_eq!(parameters.shared_secret_len, 32);
     }
 }
