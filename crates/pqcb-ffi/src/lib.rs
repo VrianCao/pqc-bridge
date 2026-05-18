@@ -8,7 +8,7 @@ use core::ptr;
 use core::slice;
 use std::panic::{self, AssertUnwindSafe};
 
-use pqcb_backend_rustcrypto::kem;
+use pqcb_backend_rustcrypto::{kem, signature};
 use pqcb_core::PqcbError;
 use pqcb_core::version::{ABI_VERSION, VERSION};
 
@@ -249,6 +249,79 @@ pub unsafe extern "C" fn pqcb_ml_kem_768_decapsulate(
         let shared_secret =
             kem::decapsulate(&secret_key, ciphertext).map_err(|error| status_from_error(&error))?;
         write_output(shared_secret_out, shared_secret.to_vec());
+        Ok(())
+    })
+}
+
+/// Generates an ML-DSA-65 keypair.
+///
+/// # Safety
+///
+/// `public_key_out` and `secret_key_out` must be valid writable pointers to
+/// `PqcbOwnedBuffer` slots.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_ml_dsa_65_keypair(
+    public_key_out: *mut PqcbOwnedBuffer,
+    secret_key_out: *mut PqcbOwnedBuffer,
+) -> PqcbStatus {
+    if public_key_out.is_null() || secret_key_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    clear_output(public_key_out);
+    clear_output(secret_key_out);
+
+    catch_status(|| {
+        let keypair = signature::keypair().map_err(|error| status_from_error(&error))?;
+        write_output(public_key_out, keypair.public_key.into_bytes());
+        write_output(secret_key_out, keypair.secret_key.expose_secret().to_vec());
+        Ok(())
+    })
+}
+
+/// Signs a message with ML-DSA-65.
+///
+/// # Safety
+///
+/// Input buffers must point to readable memory for their declared lengths.
+/// `signature_out` must be a valid writable `PqcbOwnedBuffer` slot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_ml_dsa_65_sign(
+    secret_key: PqcbBuffer,
+    message: PqcbBuffer,
+    signature_out: *mut PqcbOwnedBuffer,
+) -> PqcbStatus {
+    if signature_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    clear_output(signature_out);
+
+    catch_status(|| {
+        let secret_key = signature::secret_key(borrowed(secret_key)?.to_vec());
+        let message = borrowed(message)?;
+        let signature_bytes =
+            signature::sign(&secret_key, message).map_err(|error| status_from_error(&error))?;
+        write_output(signature_out, signature_bytes);
+        Ok(())
+    })
+}
+
+/// Verifies an ML-DSA-65 signature.
+///
+/// # Safety
+///
+/// Input buffers must point to readable memory for their declared lengths.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pqcb_ml_dsa_65_verify(
+    public_key: PqcbBuffer,
+    message: PqcbBuffer,
+    signature_bytes: PqcbBuffer,
+) -> PqcbStatus {
+    catch_status(|| {
+        let public_key = signature::public_key(borrowed(public_key)?.to_vec());
+        let message = borrowed(message)?;
+        let signature_bytes = borrowed(signature_bytes)?;
+        signature::verify(&public_key, message, signature_bytes)
+            .map_err(|error| status_from_error(&error))?;
         Ok(())
     })
 }
@@ -519,6 +592,119 @@ mod tests {
                 },
                 &raw mut ciphertext,
                 &raw mut shared_secret,
+            )
+        };
+        assert_eq!(status, PqcbStatus::InvalidLength);
+    }
+
+    #[test]
+    fn ml_dsa_keypair_sign_verify_round_trip() {
+        let mut public_key = PqcbOwnedBuffer::empty();
+        let mut secret_key = PqcbOwnedBuffer::empty();
+
+        // SAFETY: outputs are valid writable slots.
+        let status = unsafe { pqcb_ml_dsa_65_keypair(&raw mut public_key, &raw mut secret_key) };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert_eq!(public_key.len, 1_952);
+        assert_eq!(secret_key.len, 4_032);
+
+        let message = b"message";
+        let mut signature_out = PqcbOwnedBuffer::empty();
+        // SAFETY: inputs are valid buffers; output is a valid slot.
+        let status = unsafe {
+            pqcb_ml_dsa_65_sign(
+                PqcbBuffer {
+                    data: secret_key.data,
+                    len: secret_key.len,
+                },
+                PqcbBuffer {
+                    data: message.as_ptr(),
+                    len: message.len(),
+                },
+                &raw mut signature_out,
+            )
+        };
+        assert_eq!(status, PqcbStatus::Ok);
+        assert_eq!(signature_out.len, 3_309);
+
+        // SAFETY: inputs are valid buffers.
+        let status = unsafe {
+            pqcb_ml_dsa_65_verify(
+                PqcbBuffer {
+                    data: public_key.data,
+                    len: public_key.len,
+                },
+                PqcbBuffer {
+                    data: message.as_ptr(),
+                    len: message.len(),
+                },
+                PqcbBuffer {
+                    data: signature_out.data,
+                    len: signature_out.len,
+                },
+            )
+        };
+        assert_eq!(status, PqcbStatus::Ok);
+
+        let tampered = b"tampered";
+        // SAFETY: inputs are valid buffers.
+        let status = unsafe {
+            pqcb_ml_dsa_65_verify(
+                PqcbBuffer {
+                    data: public_key.data,
+                    len: public_key.len,
+                },
+                PqcbBuffer {
+                    data: tampered.as_ptr(),
+                    len: tampered.len(),
+                },
+                PqcbBuffer {
+                    data: signature_out.data,
+                    len: signature_out.len,
+                },
+            )
+        };
+        assert_eq!(status, PqcbStatus::VerificationFailed);
+
+        pqcb_buffer_free(public_key);
+        pqcb_buffer_free(secret_key);
+        pqcb_buffer_free(signature_out);
+    }
+
+    #[test]
+    fn ml_dsa_rejects_null_and_invalid_length() {
+        let message = b"message";
+        let mut signature_out = PqcbOwnedBuffer::empty();
+
+        // SAFETY: null secret key with nonzero length is intentionally tested.
+        let status = unsafe {
+            pqcb_ml_dsa_65_sign(
+                PqcbBuffer {
+                    data: ptr::null(),
+                    len: 1,
+                },
+                PqcbBuffer {
+                    data: message.as_ptr(),
+                    len: message.len(),
+                },
+                &raw mut signature_out,
+            )
+        };
+        assert_eq!(status, PqcbStatus::NullPointer);
+
+        let short_key = [0_u8; 4_031];
+        // SAFETY: input points to a stack buffer; output is a valid slot.
+        let status = unsafe {
+            pqcb_ml_dsa_65_sign(
+                PqcbBuffer {
+                    data: short_key.as_ptr(),
+                    len: short_key.len(),
+                },
+                PqcbBuffer {
+                    data: message.as_ptr(),
+                    len: message.len(),
+                },
+                &raw mut signature_out,
             )
         };
         assert_eq!(status, PqcbStatus::InvalidLength);

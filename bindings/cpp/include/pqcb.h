@@ -56,6 +56,12 @@ PqcbStatus pqcb_ml_kem_768_encapsulate(PqcbBuffer public_key,
 PqcbStatus pqcb_ml_kem_768_decapsulate(PqcbBuffer secret_key,
                                        PqcbBuffer ciphertext,
                                        PqcbOwnedBuffer *shared_secret_out);
+PqcbStatus pqcb_ml_dsa_65_keypair(PqcbOwnedBuffer *public_key_out,
+                                  PqcbOwnedBuffer *secret_key_out);
+PqcbStatus pqcb_ml_dsa_65_sign(PqcbBuffer secret_key, PqcbBuffer message,
+                               PqcbOwnedBuffer *signature_out);
+PqcbStatus pqcb_ml_dsa_65_verify(PqcbBuffer public_key, PqcbBuffer message,
+                                 PqcbBuffer signature);
 
 #ifdef __cplusplus
 }
