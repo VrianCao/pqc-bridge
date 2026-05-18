@@ -1,8 +1,12 @@
 #![deny(missing_debug_implementations)]
 //! PQC Bridge command-line interface.
 
-use anyhow::{Result, bail};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
+use pqcb_backend_rustcrypto::{kem, signature};
 use pqcb_core::algorithms::{HybridKemAlgorithm, KemAlgorithm, SignatureAlgorithm};
 use pqcb_core::version::{ABI_VERSION, PACKAGE_NAME, PROJECT_NAME, VERSION};
 
@@ -29,6 +33,42 @@ enum Command {
         /// Algorithm name.
         #[arg(long)]
         algorithm: String,
+        /// Path to write public key bytes.
+        #[arg(long)]
+        public_out: PathBuf,
+        /// Path to write secret key bytes.
+        #[arg(long)]
+        secret_out: PathBuf,
+    },
+    /// Encapsulate a shared secret to a KEM public key.
+    Encapsulate {
+        /// KEM algorithm name.
+        #[arg(long)]
+        algorithm: String,
+        /// Path to raw public key bytes.
+        #[arg(long)]
+        public_key: PathBuf,
+        /// Path to write ciphertext bytes.
+        #[arg(long)]
+        ciphertext_out: PathBuf,
+        /// Path to write shared secret bytes.
+        #[arg(long)]
+        shared_secret_out: PathBuf,
+    },
+    /// Decapsulate a shared secret from a KEM ciphertext.
+    Decapsulate {
+        /// KEM algorithm name.
+        #[arg(long)]
+        algorithm: String,
+        /// Path to raw secret key bytes.
+        #[arg(long)]
+        secret_key: PathBuf,
+        /// Path to raw ciphertext bytes.
+        #[arg(long)]
+        ciphertext: PathBuf,
+        /// Path to write shared secret bytes.
+        #[arg(long)]
+        shared_secret_out: PathBuf,
     },
     /// Seal a message for a recipient.
     Seal,
@@ -67,9 +107,29 @@ fn main() -> Result<()> {
             println!("Hybrid:");
             println!("  - {}", HybridKemAlgorithm::X25519MlKem768);
         }
-        Command::Keygen { kind, algorithm } => {
-            validate_key_algorithm(kind, &algorithm)?;
-            bail!("key generation backend is not configured in v0.1 scaffold")
+        Command::Keygen {
+            kind,
+            algorithm,
+            public_out,
+            secret_out,
+        } => {
+            run_keygen(kind, &algorithm, &public_out, &secret_out)?;
+        }
+        Command::Encapsulate {
+            algorithm,
+            public_key,
+            ciphertext_out,
+            shared_secret_out,
+        } => {
+            run_encapsulate(&algorithm, &public_key, &ciphertext_out, &shared_secret_out)?;
+        }
+        Command::Decapsulate {
+            algorithm,
+            secret_key,
+            ciphertext,
+            shared_secret_out,
+        } => {
+            run_decapsulate(&algorithm, &secret_key, &ciphertext, &shared_secret_out)?;
         }
         Command::Seal | Command::Open | Command::Sign | Command::Verify => {
             bail!("cryptographic backend is not configured in v0.1 scaffold")
@@ -93,4 +153,122 @@ fn validate_key_algorithm(kind: KeyKind, algorithm: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn run_keygen(kind: KeyKind, algorithm: &str, public_out: &Path, secret_out: &Path) -> Result<()> {
+    validate_key_algorithm(kind, algorithm)?;
+    match kind {
+        KeyKind::Kem => {
+            let algorithm = algorithm.parse::<KemAlgorithm>()?;
+            if algorithm != KemAlgorithm::MlKem768 {
+                bail!("unsupported KEM algorithm: {algorithm}");
+            }
+            let keypair = kem::keypair()?;
+            write_file(public_out, keypair.public_key.as_bytes())?;
+            write_file(secret_out, keypair.secret_key.expose_secret())?;
+            println!("wrote public key: {}", public_out.display());
+            println!("wrote secret key: {}", secret_out.display());
+        }
+        KeyKind::Signature => {
+            let algorithm = algorithm.parse::<SignatureAlgorithm>()?;
+            if algorithm != SignatureAlgorithm::MlDsa65 {
+                bail!("unsupported signature algorithm: {algorithm}");
+            }
+            let keypair = signature::keypair()?;
+            write_file(public_out, keypair.public_key.as_bytes())?;
+            write_file(secret_out, keypair.secret_key.expose_secret())?;
+            println!("wrote public key: {}", public_out.display());
+            println!("wrote secret key: {}", secret_out.display());
+        }
+        KeyKind::Hybrid => bail!("hybrid key generation is not implemented"),
+    }
+
+    Ok(())
+}
+
+fn run_encapsulate(
+    algorithm: &str,
+    public_key: &Path,
+    ciphertext_out: &Path,
+    shared_secret_out: &Path,
+) -> Result<()> {
+    let algorithm = algorithm.parse::<KemAlgorithm>()?;
+    if algorithm != KemAlgorithm::MlKem768 {
+        bail!("unsupported KEM algorithm: {algorithm}");
+    }
+
+    let public_key = kem::public_key(read_file(public_key)?);
+    let encapsulation = kem::encapsulate(&public_key)?;
+    write_file(ciphertext_out, encapsulation.ciphertext())?;
+    write_file(shared_secret_out, encapsulation.expose_shared_secret())?;
+    println!("wrote ciphertext: {}", ciphertext_out.display());
+    println!("wrote shared secret: {}", shared_secret_out.display());
+
+    Ok(())
+}
+
+fn run_decapsulate(
+    algorithm: &str,
+    secret_key: &Path,
+    ciphertext: &Path,
+    shared_secret_out: &Path,
+) -> Result<()> {
+    let algorithm = algorithm.parse::<KemAlgorithm>()?;
+    if algorithm != KemAlgorithm::MlKem768 {
+        bail!("unsupported KEM algorithm: {algorithm}");
+    }
+
+    let secret_key = kem::secret_key(read_file(secret_key)?);
+    let ciphertext = read_file(ciphertext)?;
+    let shared_secret = kem::decapsulate(&secret_key, &ciphertext)?;
+    write_file(shared_secret_out, shared_secret.as_slice())?;
+    println!("wrote shared secret: {}", shared_secret_out.display());
+
+    Ok(())
+}
+
+fn read_file(path: &Path) -> Result<Vec<u8>> {
+    fs::read(path).with_context(|| format!("read {}", path.display()))
+}
+
+fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    fs::write(path, bytes).with_context(|| format!("write {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    #[test]
+    fn ml_kem_cli_smoke_round_trip() {
+        let dir = temp_dir();
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let public_key = dir.join("kem.pub");
+        let secret_key = dir.join("kem.sec");
+        let ciphertext = dir.join("kem.ct");
+        let encapsulated_secret = dir.join("kem.ss.enc");
+        let decapsulated_secret = dir.join("kem.ss.dec");
+
+        run_keygen(KeyKind::Kem, "ML-KEM-768", &public_key, &secret_key).expect("keygen");
+        run_encapsulate("ML-KEM-768", &public_key, &ciphertext, &encapsulated_secret)
+            .expect("encapsulate");
+        run_decapsulate("ML-KEM-768", &secret_key, &ciphertext, &decapsulated_secret)
+            .expect("decapsulate");
+
+        assert_eq!(
+            fs::read(encapsulated_secret).expect("read encapsulated secret"),
+            fs::read(decapsulated_secret).expect("read decapsulated secret")
+        );
+    }
+
+    fn temp_dir() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("pqcb-cli-test-{nonce}"))
+    }
 }
