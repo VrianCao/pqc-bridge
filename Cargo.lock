@@ -436,6 +436,7 @@ dependencies = [
 name = "pqcb-ffi"
 version = "0.1.0"
 dependencies = [
+ "pqcb-backend-rustcrypto",
  "pqcb-core",
 ]
 

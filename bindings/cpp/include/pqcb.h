@@ -48,6 +48,14 @@ PqcbVersion pqcb_version(void);
 const char *pqcb_status_message(PqcbStatus status);
 PqcbStatus pqcb_backend_available(uint32_t algorithm_id, bool *available);
 void pqcb_buffer_free(PqcbOwnedBuffer buffer);
+PqcbStatus pqcb_ml_kem_768_keypair(PqcbOwnedBuffer *public_key_out,
+                                   PqcbOwnedBuffer *secret_key_out);
+PqcbStatus pqcb_ml_kem_768_encapsulate(PqcbBuffer public_key,
+                                       PqcbOwnedBuffer *ciphertext_out,
+                                       PqcbOwnedBuffer *shared_secret_out);
+PqcbStatus pqcb_ml_kem_768_decapsulate(PqcbBuffer secret_key,
+                                       PqcbBuffer ciphertext,
+                                       PqcbOwnedBuffer *shared_secret_out);
 
 #ifdef __cplusplus
 }
