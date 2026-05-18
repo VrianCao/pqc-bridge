@@ -239,11 +239,128 @@ pub trait SignatureBackend: Send + Sync {
     ) -> Result<Verification>;
 }
 
+/// Validates a signature public key before invoking a backend.
+///
+/// # Errors
+///
+/// Returns `KeyAlgorithmMismatch` or `InvalidLength` when the key is not usable
+/// with the requested algorithm.
+pub fn validate_signature_public_key(
+    algorithm: SignatureAlgorithm,
+    public_key: &PublicKey,
+) -> Result<()> {
+    let expected = KeyAlgorithm::Signature(algorithm);
+    if public_key.algorithm() != expected {
+        return Err(PqcbError::KeyAlgorithmMismatch {
+            expected: expected.as_str(),
+            actual: public_key.algorithm().as_str(),
+        });
+    }
+
+    let expected_len = algorithm.parameters().public_key_len;
+    let actual_len = public_key.as_bytes().len();
+    if actual_len != expected_len {
+        return Err(PqcbError::invalid_length(
+            "ml_dsa_65.public_key",
+            expected_len,
+            actual_len,
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates a signature secret key before invoking a backend.
+///
+/// # Errors
+///
+/// Returns `KeyAlgorithmMismatch` or `InvalidLength` when the key is not usable
+/// with the requested algorithm.
+pub fn validate_signature_secret_key(
+    algorithm: SignatureAlgorithm,
+    secret_key: &SecretKey,
+) -> Result<()> {
+    let expected = KeyAlgorithm::Signature(algorithm);
+    if secret_key.algorithm() != expected {
+        return Err(PqcbError::KeyAlgorithmMismatch {
+            expected: expected.as_str(),
+            actual: secret_key.algorithm().as_str(),
+        });
+    }
+
+    let expected_len = algorithm.parameters().secret_key_len;
+    let actual_len = secret_key.expose_secret().len();
+    if actual_len != expected_len {
+        return Err(PqcbError::invalid_length(
+            "ml_dsa_65.secret_key",
+            expected_len,
+            actual_len,
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates a signature byte string before invoking a backend.
+///
+/// # Errors
+///
+/// Returns `InvalidLength` when the signature length is not canonical for the
+/// requested algorithm.
+pub fn validate_signature(algorithm: SignatureAlgorithm, signature: &[u8]) -> Result<()> {
+    let expected_len = algorithm.parameters().signature_len;
+    let actual_len = signature.len();
+    if actual_len != expected_len {
+        return Err(PqcbError::invalid_length(
+            "ml_dsa_65.signature",
+            expected_len,
+            actual_len,
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates inputs and then invokes backend signing.
+///
+/// # Errors
+///
+/// Returns validation errors before backend invocation, or backend errors after
+/// validation succeeds.
+pub fn sign_checked(
+    backend: &impl SignatureBackend,
+    secret_key: &SecretKey,
+    message: &[u8],
+) -> Result<Vec<u8>> {
+    validate_signature_secret_key(backend.algorithm(), secret_key)?;
+    backend.sign(secret_key, message)
+}
+
+/// Validates inputs and then invokes backend verification.
+///
+/// # Errors
+///
+/// Returns validation errors before backend invocation, or backend errors after
+/// validation succeeds. Invalid signatures from the backend are returned as
+/// `PqcbError::VerificationFailed`.
+pub fn verify_checked(
+    backend: &impl SignatureBackend,
+    public_key: &PublicKey,
+    message: &[u8],
+    signature: &[u8],
+) -> Result<Verification> {
+    let algorithm = backend.algorithm();
+    validate_signature_public_key(algorithm, public_key)?;
+    validate_signature(algorithm, signature)?;
+    backend.verify(public_key, message, signature)
+}
+
 #[cfg(test)]
 mod tests {
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     use crate::algorithms::{
+        ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SECRET_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
         ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, ML_KEM_768_SECRET_KEY_LEN,
     };
 
@@ -289,6 +406,46 @@ mod tests {
             Err(PqcbError::CryptoFailure {
                 reason: "spy decapsulate",
             })
+        }
+    }
+
+    #[derive(Debug)]
+    struct SpySignatureBackend {
+        sign_calls: AtomicUsize,
+        verify_calls: AtomicUsize,
+    }
+
+    impl SpySignatureBackend {
+        fn new() -> Self {
+            Self {
+                sign_calls: AtomicUsize::new(0),
+                verify_calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl SignatureBackend for SpySignatureBackend {
+        fn algorithm(&self) -> SignatureAlgorithm {
+            SignatureAlgorithm::MlDsa65
+        }
+
+        fn keypair(&self) -> Result<SignatureKeyPair> {
+            Err(PqcbError::backend_unavailable("ML-DSA-65"))
+        }
+
+        fn sign(&self, _secret_key: &SecretKey, _message: &[u8]) -> Result<Vec<u8>> {
+            self.sign_calls.fetch_add(1, Ordering::SeqCst);
+            Err(PqcbError::CryptoFailure { reason: "spy sign" })
+        }
+
+        fn verify(
+            &self,
+            _public_key: &PublicKey,
+            _message: &[u8],
+            _signature: &[u8],
+        ) -> Result<Verification> {
+            self.verify_calls.fetch_add(1, Ordering::SeqCst);
+            Err(PqcbError::VerificationFailed)
         }
     }
 
@@ -349,5 +506,80 @@ mod tests {
             ))
         );
         assert_eq!(backend.decapsulate_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ml_dsa_invalid_secret_key_length_fails_before_backend_call() {
+        let backend = SpySignatureBackend::new();
+        let secret_key = SecretKey::new(
+            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
+            vec![0; ML_DSA_65_SECRET_KEY_LEN - 1],
+        );
+
+        assert_eq!(
+            sign_checked(&backend, &secret_key, b"message"),
+            Err(PqcbError::invalid_length(
+                "ml_dsa_65.secret_key",
+                ML_DSA_65_SECRET_KEY_LEN,
+                ML_DSA_65_SECRET_KEY_LEN - 1,
+            ))
+        );
+        assert_eq!(backend.sign_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ml_dsa_invalid_public_key_length_fails_before_backend_call() {
+        let backend = SpySignatureBackend::new();
+        let public_key = PublicKey::new(
+            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
+            vec![0; ML_DSA_65_PUBLIC_KEY_LEN - 1],
+        );
+        let signature = vec![0; ML_DSA_65_SIGNATURE_LEN];
+
+        assert_eq!(
+            verify_checked(&backend, &public_key, b"message", &signature),
+            Err(PqcbError::invalid_length(
+                "ml_dsa_65.public_key",
+                ML_DSA_65_PUBLIC_KEY_LEN,
+                ML_DSA_65_PUBLIC_KEY_LEN - 1,
+            ))
+        );
+        assert_eq!(backend.verify_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ml_dsa_malformed_signature_fails_before_backend_call() {
+        let backend = SpySignatureBackend::new();
+        let public_key = PublicKey::new(
+            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
+            vec![0; ML_DSA_65_PUBLIC_KEY_LEN],
+        );
+        let signature = vec![0; ML_DSA_65_SIGNATURE_LEN - 1];
+
+        assert_eq!(
+            verify_checked(&backend, &public_key, b"message", &signature),
+            Err(PqcbError::invalid_length(
+                "ml_dsa_65.signature",
+                ML_DSA_65_SIGNATURE_LEN,
+                ML_DSA_65_SIGNATURE_LEN - 1,
+            ))
+        );
+        assert_eq!(backend.verify_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn ml_dsa_verification_failure_is_explicit() {
+        let backend = SpySignatureBackend::new();
+        let public_key = PublicKey::new(
+            KeyAlgorithm::Signature(SignatureAlgorithm::MlDsa65),
+            vec![0; ML_DSA_65_PUBLIC_KEY_LEN],
+        );
+        let signature = vec![0; ML_DSA_65_SIGNATURE_LEN];
+
+        assert_eq!(
+            verify_checked(&backend, &public_key, b"wrong key behavior", &signature),
+            Err(PqcbError::VerificationFailed)
+        );
+        assert_eq!(backend.verify_calls.load(Ordering::SeqCst), 1);
     }
 }
