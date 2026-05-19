@@ -45,6 +45,13 @@ Semantic Versioning once it reaches v1.0.
 
 - Use this section for bug fixes that preserve compatibility.
 
+### Verification
+
+- Recorded the v1.0 release readiness dry run for
+  `v1-stable-release-hardening`, including local `./scripts/check.sh`, release
+  workflow run `26114163526`, checksum/SBOM/provenance generation, and
+  explicit dry-run non-publishing rationale.
+
 ## [0.1.0] - Unreleased
 
 ### Added
