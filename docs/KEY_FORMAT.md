@@ -14,29 +14,115 @@ formats independently.
 - Keep binary and text encodings deterministic.
 - Avoid leaking secret material through debug or logs.
 
-## Envelope Fields
+## v1 Binary Envelope
 
-Planned binary envelope fields:
+All SDK-native serialized objects use the same v1 binary envelope. Multi-byte
+integer fields are unsigned big-endian. Parsers must reject truncated input,
+trailing bytes, non-canonical lengths, unsupported versions, unsupported
+object/algorithm combinations, and unknown required flags before exposing
+material to callers.
+
+Byte-level schema:
+
+| Offset | Size | Field | Encoding | Required behavior |
+| ---: | ---: | --- | --- | --- |
+| 0 | 4 | `magic` | ASCII `PQCB` (`0x50 0x51 0x43 0x42`) | Reject any other value. |
+| 4 | 1 | `version` | `0x01` for this format | Reject unsupported versions. |
+| 5 | 1 | `object_type` | Numeric object type from the table below | Reject unknown values. |
+| 6 | 2 | `algorithm` | Numeric algorithm/profile ID from the table below | Reject unknown values and invalid object combinations. |
+| 8 | 2 | `flags` | Bit field, big-endian | Reject unknown required flags; ignore unknown advisory flags only when defined as advisory. |
+| 10 | 4 | `material_length` | Big-endian byte length of `material` | Must equal the remaining material size implied by this header. |
+| 14 | `material_length` | `material` | Object-specific bytes | Must be parsed according to `object_type` and `algorithm`. |
+| 14 + `material_length` | 32 | `checksum_or_authentication` | SHA-256 checksum for public objects; authentication tag for encrypted/private objects | Must verify before accepting the envelope. |
+
+The final field is always present. Public objects that are not confidential use
+`SHA-256(header_without_checksum || material)` as corruption detection only; it
+is not an authenticity claim. Secret-key and sealed-message envelopes must use
+an authenticated construction defined by the high-level API that covers the same
+header bytes and material bytes.
+
+The canonical serialized length is:
 
 ```text
-magic
-version
-object_type
-algorithm
-flags
-material_length
-material
-checksum_or_authentication
+14 + material_length + 32
 ```
 
-Planned object types:
+Parsers must compare the input length to this value exactly.
 
-- public key
-- secret key
-- ciphertext
-- signature
-- sealed message
-- file envelope
+### Object Types
+
+| ID | Object type | Material format |
+| ---: | --- | --- |
+| `0x01` | Public key | Raw public key bytes for the selected algorithm. |
+| `0x02` | Secret key | Raw secret key bytes or an authenticated encrypted private-key payload when `encrypted` is set. |
+| `0x03` | Ciphertext | Raw KEM ciphertext bytes for the selected KEM algorithm. |
+| `0x04` | Signature | Raw signature bytes for the selected signature algorithm. |
+| `0x05` | Sealed message | High-level sealed-message payload, including its own nonce and associated-data binding. |
+| `0x06` | File envelope | High-level file-envelope payload, including chunking metadata when present. |
+
+### Algorithm IDs
+
+| ID | Algorithm/profile | Valid object types |
+| ---: | --- | --- |
+| `0x0001` | `ML-KEM-768` | Public key, secret key, ciphertext. |
+| `0x0002` | `ML-DSA-65` | Public key, secret key, signature. |
+| `0x0101` | `X25519-ML-KEM-768` | Public key, secret key, sealed message, file envelope. |
+
+Unknown algorithm IDs are reserved for future versions and must fail closed.
+
+### Flags
+
+| Bit | Name | Meaning | Parser behavior |
+| ---: | --- | --- | --- |
+| 0 | `encrypted` | `material` contains an authenticated encrypted payload rather than raw bytes. | Required for secret-key files at rest; optional for public objects only when explicitly documented. |
+| 1 | `contains_secret` | Envelope material is secret or can derive secrets. | Must trigger debug redaction and restrictive file handling. |
+| 2 | `detached_material` | Envelope authenticates material stored outside this byte string. | Reserved for later file-envelope work; v1 parsers must reject it. |
+| 3-15 | Reserved | Future use. | v1 parsers must reject when nonzero. |
+
+Secret-key envelopes must set `contains_secret`. Public keys, ciphertexts, and
+signatures must not set it. Secret-key files written by CLI or bindings should
+also set `encrypted`; unencrypted secret-key import/export may exist only behind
+an explicit unsafe or development-only control.
+
+### Canonical Material Lengths
+
+Primitive objects have fixed material lengths:
+
+| Object | Algorithm | Material length |
+| --- | --- | ---: |
+| Public key | `ML-KEM-768` | 1,184 bytes |
+| Secret key | `ML-KEM-768` | 2,400 bytes before any private-key encryption wrapper |
+| Ciphertext | `ML-KEM-768` | 1,088 bytes |
+| Public key | `ML-DSA-65` | 1,952 bytes |
+| Secret key | `ML-DSA-65` | 4,032 bytes before any private-key encryption wrapper |
+| Signature | `ML-DSA-65` | 3,309 bytes |
+
+High-level objects such as sealed messages and file envelopes are variable
+length. Their inner material format must include enough authenticated metadata
+to bind nonce, algorithm profile, associated data, and payload length; those
+fields are not allowed to contradict the outer header.
+
+### Unknown-Field Behavior
+
+The v1 envelope has no extension area and therefore no unknown fields inside the
+outer header. Additive metadata must be added either to an authenticated
+high-level material format or to a future envelope version. A v1 parser must not
+skip bytes that are not accounted for by `material_length` and the final
+checksum/authentication field.
+
+### File Permissions
+
+Writers should create files with owner-only permissions for envelopes that set
+`contains_secret`, for example `0600` on Unix-like systems. On platforms without
+POSIX permissions, bindings must document the closest available private-file
+behavior. Readers must not rely on file permissions as a substitute for
+authenticated encryption.
+
+### Text Encoding
+
+Text encoding, when needed, is base64url without padding over the exact binary
+envelope bytes. Pretty-printed or line-wrapped text encodings are display forms
+only and must decode to the canonical binary representation before validation.
 
 ## Standard Format Interop
 
