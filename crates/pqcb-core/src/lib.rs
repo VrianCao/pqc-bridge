@@ -13,6 +13,7 @@ pub mod kem;
 pub mod keys;
 pub mod prelude;
 pub mod sealed_box;
+pub mod secure_session;
 pub mod signature;
 pub mod signed_message;
 pub mod traits;
@@ -27,6 +28,7 @@ pub use envelope::{
 pub use errors::{PqcbError, Result};
 pub use keys::{PublicKey, SecretKey};
 pub use sealed_box::{SEALED_BOX_NONCE_LEN, SEALED_BOX_TAG_LEN, SealedBox};
+pub use secure_session::{SecureSession, SecureSessionState};
 pub use signed_message::SignedMessage;
 pub use traits::{
     Encapsulation, KemBackend, KemKeyPair, SignatureBackend, SignatureKeyPair, Verification,
