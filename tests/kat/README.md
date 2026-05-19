@@ -79,7 +79,7 @@ Required case fields:
 | `id` | string | Stable case identifier unique within the manifest. |
 | `type` | string | `positive` or `negative`. |
 | `operation` | string | Algorithm-specific operation such as `keygen`, `encapsulate`, `decapsulate`, `sign`, or `verify`. |
-| `expected` | string | `success`, `invalid-length`, `verification-failed`, or `crypto-failure`. |
+| `expected` | string | `success`, `invalid-length`, `verification-failed`, `crypto-failure`, or `changed-secret`. |
 | `inputs` | object | Paths, hex strings, or metadata needed by the harness. |
 | `outputs` | object | Expected outputs for positive cases or `{}` for negative cases. |
 

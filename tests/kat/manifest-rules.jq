@@ -11,7 +11,8 @@ def valid_case:
   and (.expected == "success"
        or .expected == "invalid-length"
        or .expected == "verification-failed"
-       or .expected == "crypto-failure")
+       or .expected == "crypto-failure"
+       or .expected == "changed-secret")
   and (.inputs | type == "object")
   and (.outputs | type == "object");
 

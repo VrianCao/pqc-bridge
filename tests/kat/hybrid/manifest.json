@@ -1,0 +1,60 @@
+{
+  "schema_version": "1",
+  "algorithm": "Hybrid KEM",
+  "parameter_set": "X25519-ML-KEM-768",
+  "upstream": {
+    "name": "x25519-dalek + RustCrypto ml-kem",
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek; https://github.com/RustCrypto/KEMs",
+    "version": "x25519-dalek 2.0.1; ml-kem 0.3.2"
+  },
+  "source": {
+    "name": "PQC Bridge deterministic hybrid v0.5 fixture",
+    "url": "docs/rfcs/0003-hybrid-composition.md",
+    "license": "MIT OR Apache-2.0",
+    "redistribution": "Repository-owned metadata generated from pinned upstream crates. Secret inputs are test-only and must not be reused."
+  },
+  "generation": {
+    "method": "project-generated",
+    "command": "X25519 static secrets 11*32 and 22*32; MlKem768::from_seed(00*64); encapsulate_deterministic(00*32); derive RFC 0003 transcript; checksum is SHA-256 over concatenated output digests and public X25519 keys",
+    "date": "2026-05-19"
+  },
+  "checksum": {
+    "algorithm": "SHA-256",
+    "value": "802a2f15d373f30ea733ad3bbb6edf4e0295c455c2d12f216c71cfff7ac767cb"
+  },
+  "cases": [
+    {
+      "id": "hybrid-x25519-ml-kem-768-deterministic-session",
+      "type": "positive",
+      "operation": "decapsulate",
+      "expected": "success",
+      "inputs": {
+        "profile": "X25519-ML-KEM-768",
+        "context_hex": "5051434220687962726964204b4154207631",
+        "initiator_x25519_secret_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+        "responder_x25519_secret_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+        "ml_kem_seed_hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "ml_kem_encapsulation_randomness_hex": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "outputs": {
+        "initiator_x25519_public_key_hex": "0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20",
+        "responder_x25519_public_key_hex": "7b4e909bbe7ffe44c465a220037d608ee35897d31ef972f07f74892cb0f73f13",
+        "ml_kem_public_key_sha256": "f95c185fe5b2335d2fc938dd889c6425944acd74376b6952bf1130f720f6ba99",
+        "ml_kem_ciphertext_sha256": "1f92454af68a16b43b8013a909a1df7058c44f170b5cf9cc00cb165a3ca58c68",
+        "derived_shared_secret_sha256": "cf59947758774bdfa14601bbf3df148f2626cf673db665225c302cdff74de0ab"
+      }
+    },
+    {
+      "id": "hybrid-x25519-ml-kem-768-replayed-context-change",
+      "type": "negative",
+      "operation": "decapsulate",
+      "expected": "changed-secret",
+      "inputs": {
+        "profile": "X25519-ML-KEM-768",
+        "context_hex": "5051434220687962726964204b4154207632",
+        "base_case": "hybrid-x25519-ml-kem-768-deterministic-session"
+      },
+      "outputs": {}
+    }
+  ]
+}
