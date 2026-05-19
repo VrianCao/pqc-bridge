@@ -134,4 +134,40 @@ All exported C symbols use the `pqcb_` prefix.
 
 Before v1.0, ABI changes are allowed with changelog notes.
 
-At v1.0, ABI major version changes should be reserved for breaking changes.
+At v1.0, the C ABI becomes a stable compatibility boundary. ABI versioning is
+independent of package semantic versioning but release notes must report both
+the package version and the ABI major/minor version.
+
+ABI version rules after v1.0:
+
+- The ABI major version changes for breaking symbol removals, incompatible
+  `#[repr(C)]` layout changes, changed ownership rules, changed status-code
+  meaning, or changed algorithm semantics.
+- The ABI minor version changes for additive symbols, additive status codes,
+  new algorithm IDs, or new feature-detection functions.
+- Patch releases must not change exported symbol signatures, data layout,
+  ownership, status-code semantics, or existing algorithm IDs.
+- Unknown status codes, unknown algorithm IDs, and unsupported minor-version
+  features must fail closed in bindings.
+- Existing ABI symbols must remain available for the full ABI major support
+  window unless a security issue makes continued support unsafe.
+
+Breaking ABI changes require:
+
+- a new ABI major version
+- changelog entry under `Changed`, `Removed`, or `Security`
+- migration notes naming removed or changed symbols
+- binding smoke tests that reject unsupported ABI majors
+- release notes describing compatibility impact
+
+Additive ABI changes require:
+
+- feature-detection behavior
+- null-pointer and invalid-length tests where the new entrypoint accepts
+  buffers
+- binding mapping updates or an explicit note that the binding does not expose
+  the new capability yet
+
+Bindings must check `pqcb_abi_version_major` before calling primitive functions.
+They may use `pqcb_abi_version_minor` and `pqcb_backend_available` to expose
+new capabilities without requiring a major binding release.
