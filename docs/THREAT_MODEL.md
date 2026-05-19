@@ -90,6 +90,29 @@ The skeleton must not silently downgrade to PQ-only or classical-only behavior.
 Until X25519 + ML-KEM-768 composition is implemented and tested, hybrid session
 setup returns `BackendUnavailable`.
 
+## Hybrid Session Transcript Controls
+
+The v0.5 `X25519-ML-KEM-768` profile binds the hybrid profile name, initiator
+X25519 public key, responder X25519 public key, responder ML-KEM-768 public key,
+ML-KEM-768 ciphertext, and caller context into the HKDF transcript salt. Tests
+cover these downgrade and transcript cases:
+
+- pure `X25519` and pure `ML-KEM-768` names are rejected by the hybrid profile
+  parser
+- an invalid X25519 public key that produces an all-zero shared secret fails
+  closed
+- swapping the responder public key fails closed before returning a secret
+- altering the initiator public key changes the derived output
+- changing caller context, including a replay/freshness value, changes the
+  derived output
+- tampering with the ML-KEM ciphertext does not authenticate as the original
+  setup; ML-KEM implicit rejection produces a different derived output
+
+Replay protection depends on the embedding protocol supplying fresh caller
+context, such as a nonce, channel ID, or handshake hash. Replaying the same
+setup with the same context is outside the combiner's standalone detection
+boundary; replay-sensitive protocols must bind freshness into the context.
+
 ## Side-Channel Position
 
 PQC Bridge must not claim side-channel resistance unless the backend and build
