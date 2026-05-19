@@ -46,11 +46,12 @@ typedef struct PqcbOwnedBuffer {
 
 const char *pqcb_status_message(PqcbStatus status);
 void pqcb_buffer_free(PqcbOwnedBuffer buffer);
+void pqcb_buffer_free_parts(uint8_t *data, size_t len);
 ```
 
 `PqcbBuffer` is caller-owned and borrowed only for the duration of the call.
 `PqcbOwnedBuffer` is library-owned and must be released exactly once with
-`pqcb_buffer_free`.
+`pqcb_buffer_free` or `pqcb_buffer_free_parts`.
 
 ### Ownership Table
 
@@ -59,6 +60,8 @@ void pqcb_buffer_free(PqcbOwnedBuffer buffer);
 | `pqcb_abi_version` | none | integer ABI version | No heap ownership. |
 | `pqcb_version` | none | `PqcbVersion` by value | No heap ownership. |
 | `pqcb_backend_available` | algorithm ID by value | status/boolean by value | No heap ownership. |
+| `pqcb_buffer_free` | `PqcbOwnedBuffer` by value | none | Releases one library-owned output buffer. |
+| `pqcb_buffer_free_parts` | pointer and length from `PqcbOwnedBuffer` | none | Releases one library-owned output buffer for FFI layers that cannot safely pass structs by value. |
 | `pqcb_ml_kem_768_keypair` | none | public key and secret key `PqcbOwnedBuffer`s | Caller must free both output buffers. On error, outputs are null/zero. |
 | `pqcb_ml_kem_768_encapsulate` | public key `PqcbBuffer` | ciphertext and shared secret `PqcbOwnedBuffer`s | Caller owns input. Caller frees both outputs. Shared secret is never printed or exposed as a string. |
 | `pqcb_ml_kem_768_decapsulate` | secret key and ciphertext `PqcbBuffer`s | shared secret `PqcbOwnedBuffer` | Caller owns inputs. Caller frees output. |
