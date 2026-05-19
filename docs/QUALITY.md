@@ -27,6 +27,27 @@ PQC Bridge should be held to infrastructure-level quality before stable release.
   generation method, license or redistribution terms, checksum, and positive
   and negative expected-result metadata
 
+## Fuzzing
+
+Envelope parsing has a `cargo-fuzz` target at
+`fuzz/fuzz_targets/envelope_decode.rs`. It accepts arbitrary bytes and calls the
+v1 envelope decoder without requiring secrets, network access, or backend
+cryptographic operations.
+
+Install `cargo-fuzz` before running libFuzzer locally:
+
+```sh
+cargo install cargo-fuzz
+cargo fuzz build envelope_decode
+cargo fuzz run envelope_decode
+```
+
+When `cargo-fuzz` is not installed, the target can still be type-checked with:
+
+```sh
+cargo check --manifest-path fuzz/Cargo.toml --bin envelope_decode
+```
+
 ## Binding Checks
 
 Each binding should include:
