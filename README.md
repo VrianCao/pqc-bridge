@@ -8,9 +8,10 @@ application developers to become cryptography specialists. PQC Bridge exposes
 safe high-level APIs for common workflows while preserving low-level primitive
 APIs for protocol engineers and security teams.
 
-> Status: v0.1 developer preview scaffold. Cryptographic backends are not
-> enabled yet. The current repository defines the architecture, API contracts,
-> language binding layout, CLI surface, governance, and CI baseline.
+> Status: pre-v1.0 developer preview. The repository includes a selected
+> RustCrypto backend path, KAT coverage, parser and FFI fuzzing, binding smoke
+> tests, and release gates. Do not use it for production secrets until the
+> stable release checklist and security review scope are complete.
 
 ## Design Principles
 
@@ -18,7 +19,7 @@ APIs for protocol engineers and security teams.
 - No custom cryptography.
 - NIST-standardized algorithms before experimental algorithms.
 - Hybrid migration before abrupt replacement.
-- One audited core, many language bindings.
+- One core implementation strategy, many language bindings.
 - Stable wire formats and C ABI boundaries.
 - Clear distinction between standards compatibility and FIPS certification.
 
@@ -127,9 +128,10 @@ Priority order:
 ## Security Notice
 
 PQC Bridge targets compatibility with NIST post-quantum cryptography standards,
-but this repository is not FIPS 140-3 certified. Do not use the v0.1 scaffold
-to protect production secrets until a real backend, KAT coverage, fuzzing,
-side-channel review, and release hardening are complete.
+but this repository is not FIPS 140-3 certified. Do not use pre-v1.0 releases
+to protect production secrets until backend KAT coverage, fuzzing,
+side-channel review scope, and release hardening are complete for the advertised
+release.
 
 For vulnerability reporting, see [SECURITY.md](SECURITY.md).
 

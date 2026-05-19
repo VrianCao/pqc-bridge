@@ -7,11 +7,11 @@ vulnerabilities through public issues.
 
 | Version | Supported |
 | --- | --- |
-| v0.1 developer preview | No production support |
+| pre-v1.0 releases | No production-secret support |
 
-The repository is in scaffold phase. Production support begins only after a real
-cryptographic backend, known-answer tests, fuzzing, and release hardening are in
-place.
+Production-secret support begins only after the selected backend, KAT coverage,
+fuzzing, release hardening, side-channel notes, and audit readiness scope have
+all been reviewed for the release being advertised.
 
 ## Reporting a Vulnerability
 
@@ -33,6 +33,12 @@ PQC Bridge may target compatibility with NIST standards such as FIPS 203,
 FIPS 204, and FIPS 205. That is not the same as FIPS 140-3 module validation.
 
 No FIPS 140-3 certification is claimed by this repository.
+
+No independent side-channel audit is claimed unless a release note or advisory
+identifies the reviewer, scope, version, platform, and remaining limitations.
+Reports involving timing behavior, memory disclosure, RNG failure, FFI lifetime
+issues, binding crashes, key material logging, dependency compromise, or release
+artifact integrity are in scope for the private reporting process.
 
 ## Disclosure Process
 

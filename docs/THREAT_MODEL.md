@@ -115,13 +115,55 @@ boundary; replay-sensitive protocols must bind freshness into the context.
 
 ## Side-Channel Position
 
-PQC Bridge must not claim side-channel resistance unless the backend and build
-profile have been reviewed for that claim. Documentation should distinguish:
+PQC Bridge must not claim side-channel resistance unless the backend, adapter,
+FFI boundary, binding layer, and build profile have been reviewed for that
+claim. Current claims are limited to the standards implemented, the selected
+upstream packages, and the validation performed in this repository.
 
-- constant-time design intent
-- upstream implementation claims
-- independent review
-- platform-specific limitations
+For the RustCrypto default backend, PQC Bridge records these distinctions:
+
+- `ml-kem` and `ml-dsa` are upstream RustCrypto crates pinned by exact version.
+- PQC Bridge has KAT, negative-test, parser fuzz, and FFI fuzz coverage for its
+  integration surface.
+- PQC Bridge has not completed an independent side-channel audit of the
+  upstream crates, the adapter crate, the C ABI, or language bindings.
+- FIPS algorithm compatibility does not imply FIPS 140-3 validation.
+
+Platform and build limitations:
+
+- Randomness comes from the configured provider and target OS integration.
+  WASM, mobile, embedded, and restricted-sandbox targets need explicit RNG
+  validation before being advertised as supported production targets.
+- Native CPU features, compiler flags, linker choices, and dependency feature
+  changes can affect side-channel posture. Release builds must record the exact
+  crate versions, enabled features, target triples, and release profile.
+- The C ABI and language bindings copy key, ciphertext, signature, and shared
+  secret material across memory ownership boundaries. The FFI surface validates
+  lengths and explicit frees, but it is still in audit scope for lifetime,
+  zeroization, and accidental logging risks.
+- Physical attacks, shared-host microarchitectural attacks, compromised hosts,
+  and compromised random number generators below the backend remain outside the
+  current security claim boundary.
+
+Audit readiness scope:
+
+- backend adapter calls for ML-KEM-768, ML-DSA-65, and hybrid
+  X25519-ML-KEM-768 composition
+- key envelope parsing, checksum behavior, and fail-closed error handling
+- FFI ownership, buffer free functions, binding marshaling, and crash
+  resistance for malformed inputs
+- release supply-chain controls, including pinned dependencies, SBOMs,
+  checksums, signed tags, and provenance attestations
+- documentation language for standards compatibility, review status, platform
+  limitations, and certification status
+
+Open risks before a stable production claim:
+
+- independent side-channel review has not been completed
+- external audit findings, if any, have not yet been triaged and remediated
+- WASM/mobile RNG and target-specific build posture require explicit validation
+- optional future providers need the same KAT, fuzz, FFI, and documentation
+  gates before being treated as production supported
 
 ## Quantum Threat Position
 
