@@ -115,6 +115,40 @@ pub mod signature {
     }
 }
 
+/// Signed-message facade backed by the default `RustCrypto` provider.
+pub mod signed_message {
+    use pqcb_core::{PublicKey, Result, SecretKey, SignedMessage, Verification};
+
+    use crate::RustCryptoBackend;
+
+    /// Signs `message` with `secret_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation or backend errors.
+    pub fn sign(secret_key: &SecretKey, message: &[u8]) -> Result<SignedMessage> {
+        SignedMessage::sign(&RustCryptoBackend::new(), secret_key, message)
+    }
+
+    /// Verifies `signed_message` with `public_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation errors or `VerificationFailed`.
+    pub fn verify(public_key: &PublicKey, signed_message: &SignedMessage) -> Result<Verification> {
+        signed_message.verify(&RustCryptoBackend::new(), public_key)
+    }
+
+    /// Deserializes a signed message from deterministic bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the signed message is malformed.
+    pub fn from_bytes(bytes: &[u8]) -> Result<SignedMessage> {
+        SignedMessage::from_bytes(bytes)
+    }
+}
+
 /// `RustCrypto` backend adapter.
 ///
 /// The type is intentionally provider-neutral at its public boundary. Provider
@@ -282,7 +316,7 @@ fn verifying_key(bytes: &[u8]) -> VerifyingKey<MlDsa65> {
 mod tests {
     use pqcb_core::{
         KemAlgorithm, KemBackend, KeyAlgorithm, PqcbError, PublicKey, SignatureAlgorithm,
-        SignatureBackend, Verification,
+        SignatureBackend, SignedMessage, Verification,
         algorithms::{
             ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SECRET_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
             ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, ML_KEM_768_SECRET_KEY_LEN,
@@ -438,6 +472,71 @@ mod tests {
 
         assert_eq!(
             verify_checked(&backend, &keypair.public_key, b"message", &signature),
+            Err(PqcbError::VerificationFailed)
+        );
+    }
+
+    #[test]
+    fn signed_message_sign_verify_and_serialize_round_trip() {
+        let backend = RustCryptoBackend::new();
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
+        let signed =
+            SignedMessage::sign(&backend, &keypair.secret_key, b"message").expect("sign message");
+        let encoded = signed.to_bytes().expect("serialize signed message");
+        let decoded = SignedMessage::from_bytes(&encoded).expect("deserialize signed message");
+
+        assert_eq!(decoded, signed);
+        assert_eq!(
+            signed
+                .verify(&backend, &keypair.public_key)
+                .expect("verify"),
+            Verification::Valid
+        );
+    }
+
+    #[test]
+    fn signed_message_tampered_message_fails_verification() {
+        let backend = RustCryptoBackend::new();
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
+        let signed =
+            SignedMessage::sign(&backend, &keypair.secret_key, b"message").expect("sign message");
+        let tampered = SignedMessage::from_parts(b"tampered", signed.signature())
+            .expect("rebuild signed message");
+
+        assert_eq!(
+            tampered.verify(&backend, &keypair.public_key),
+            Err(PqcbError::VerificationFailed)
+        );
+    }
+
+    #[test]
+    fn signed_message_tampered_signature_fails_verification() {
+        let backend = RustCryptoBackend::new();
+        let keypair = SignatureBackend::keypair(&backend).expect("generate ML-DSA keypair");
+        let signed =
+            SignedMessage::sign(&backend, &keypair.secret_key, b"message").expect("sign message");
+        let mut signature = signed.signature().to_vec();
+        signature[0] ^= 0xff;
+        let tampered = SignedMessage::from_parts(signed.message(), &signature)
+            .expect("rebuild signed message");
+
+        assert_eq!(
+            tampered.verify(&backend, &keypair.public_key),
+            Err(PqcbError::VerificationFailed)
+        );
+    }
+
+    #[test]
+    fn signed_message_wrong_key_fails_verification() {
+        let backend = RustCryptoBackend::new();
+        let signing_keypair = SignatureBackend::keypair(&backend).expect("generate signer keypair");
+        let verifying_keypair =
+            SignatureBackend::keypair(&backend).expect("generate verifier keypair");
+        let signed = SignedMessage::sign(&backend, &signing_keypair.secret_key, b"message")
+            .expect("sign message");
+
+        assert_eq!(
+            signed.verify(&backend, &verifying_keypair.public_key),
             Err(PqcbError::VerificationFailed)
         );
     }

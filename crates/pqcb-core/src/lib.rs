@@ -13,6 +13,7 @@ pub mod kem;
 pub mod keys;
 pub mod prelude;
 pub mod signature;
+pub mod signed_message;
 pub mod traits;
 pub mod version;
 
@@ -24,6 +25,7 @@ pub use envelope::{
 };
 pub use errors::{PqcbError, Result};
 pub use keys::{PublicKey, SecretKey};
+pub use signed_message::SignedMessage;
 pub use traits::{
     Encapsulation, KemBackend, KemKeyPair, SignatureBackend, SignatureKeyPair, Verification,
     decapsulate_checked, encapsulate_checked, sign_checked, validate_kem_ciphertext,

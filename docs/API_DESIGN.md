@@ -54,6 +54,20 @@ Target use cases:
 - release artifact signatures
 - audit log integrity
 
+Minimal RustCrypto-backed workflow:
+
+```rust
+let keys = pqcb_backend_rustcrypto::signature::keypair()?;
+let signed = pqcb_backend_rustcrypto::signed_message::sign(
+    &keys.secret_key,
+    b"artifact digest",
+)?;
+let encoded = signed.to_bytes()?;
+let decoded = pqcb_backend_rustcrypto::signed_message::from_bytes(&encoded)?;
+pqcb_backend_rustcrypto::signed_message::verify(&keys.public_key, &decoded)?;
+# Ok::<(), pqcb_core::PqcbError>(())
+```
+
 ## Primitive API
 
 The primitive API is the expert mode. It is intended for protocol implementors,
