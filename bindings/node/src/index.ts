@@ -94,6 +94,45 @@ export class PanicError extends PqcbError {
 type NativeLibrary = {
   pqcb_version: () => { major: number; minor: number; patch: number };
   pqcb_backend_available: (algorithmId: number, available: [boolean]) => number;
+  pqcb_ml_kem_768_keypair: (
+    publicKey: [OwnedBuffer],
+    secretKey: [OwnedBuffer],
+  ) => number;
+  pqcb_ml_kem_768_encapsulate: (
+    publicKey: BorrowedBuffer,
+    ciphertext: [OwnedBuffer],
+    sharedSecret: [OwnedBuffer],
+  ) => number;
+  pqcb_ml_kem_768_decapsulate: (
+    secretKey: BorrowedBuffer,
+    ciphertext: BorrowedBuffer,
+    sharedSecret: [OwnedBuffer],
+  ) => number;
+  pqcb_ml_dsa_65_keypair: (
+    publicKey: [OwnedBuffer],
+    secretKey: [OwnedBuffer],
+  ) => number;
+  pqcb_ml_dsa_65_sign: (
+    secretKey: BorrowedBuffer,
+    message: BorrowedBuffer,
+    signature: [OwnedBuffer],
+  ) => number;
+  pqcb_ml_dsa_65_verify: (
+    publicKey: BorrowedBuffer,
+    message: BorrowedBuffer,
+    signature: BorrowedBuffer,
+  ) => number;
+  pqcb_buffer_free: (buffer: OwnedBuffer) => void;
+};
+
+type BorrowedBuffer = {
+  data: Buffer;
+  len: number;
+};
+
+type OwnedBuffer = {
+  data?: bigint | null;
+  len?: number;
 };
 
 let loadedNative: NativeLibrary | undefined;
@@ -131,6 +170,15 @@ function native(): NativeLibrary {
       minor: "uint16_t",
       patch: "uint16_t",
     });
+    const borrowedBuffer = koffi.struct("PqcbBuffer", {
+      data: "void *",
+      len: "size_t",
+    });
+    const ownedBuffer = koffi.struct("PqcbOwnedBuffer", {
+      data: "void *",
+      len: "size_t",
+    });
+    const ownedBufferOut = () => koffi.out(koffi.pointer(ownedBuffer));
 
     loadedNative = {
       pqcb_version: library.func("pqcb_version", pqcbVersion, []) as NativeLibrary["pqcb_version"],
@@ -138,6 +186,37 @@ function native(): NativeLibrary {
         "uint32_t",
         koffi.out(koffi.pointer("bool")),
       ]) as NativeLibrary["pqcb_backend_available"],
+      pqcb_ml_kem_768_keypair: library.func("pqcb_ml_kem_768_keypair", "uint32_t", [
+        ownedBufferOut(),
+        ownedBufferOut(),
+      ]) as NativeLibrary["pqcb_ml_kem_768_keypair"],
+      pqcb_ml_kem_768_encapsulate: library.func("pqcb_ml_kem_768_encapsulate", "uint32_t", [
+        borrowedBuffer,
+        ownedBufferOut(),
+        ownedBufferOut(),
+      ]) as NativeLibrary["pqcb_ml_kem_768_encapsulate"],
+      pqcb_ml_kem_768_decapsulate: library.func("pqcb_ml_kem_768_decapsulate", "uint32_t", [
+        borrowedBuffer,
+        borrowedBuffer,
+        ownedBufferOut(),
+      ]) as NativeLibrary["pqcb_ml_kem_768_decapsulate"],
+      pqcb_ml_dsa_65_keypair: library.func("pqcb_ml_dsa_65_keypair", "uint32_t", [
+        ownedBufferOut(),
+        ownedBufferOut(),
+      ]) as NativeLibrary["pqcb_ml_dsa_65_keypair"],
+      pqcb_ml_dsa_65_sign: library.func("pqcb_ml_dsa_65_sign", "uint32_t", [
+        borrowedBuffer,
+        borrowedBuffer,
+        ownedBufferOut(),
+      ]) as NativeLibrary["pqcb_ml_dsa_65_sign"],
+      pqcb_ml_dsa_65_verify: library.func("pqcb_ml_dsa_65_verify", "uint32_t", [
+        borrowedBuffer,
+        borrowedBuffer,
+        borrowedBuffer,
+      ]) as NativeLibrary["pqcb_ml_dsa_65_verify"],
+      pqcb_buffer_free: library.func("pqcb_buffer_free", "void", [
+        ownedBuffer,
+      ]) as NativeLibrary["pqcb_buffer_free"],
     };
     return loadedNative;
   } catch (error) {
@@ -160,6 +239,116 @@ export function backendAvailable(algorithm: PrimitiveAlgorithm): boolean {
   const status = native().pqcb_backend_available(algorithmId, available);
   throwIfError(status, "backend availability", algorithm);
   return available[0];
+}
+
+export type KemKeypair = {
+  publicKey: Buffer;
+  secretKey: Buffer;
+};
+
+export type Encapsulation = {
+  ciphertext: Buffer;
+  sharedSecret: Buffer;
+};
+
+export type SignatureKeypair = {
+  publicKey: Buffer;
+  secretKey: Buffer;
+};
+
+export const kem = {
+  keypair(): KemKeypair {
+    const publicKey: [OwnedBuffer] = [{}];
+    const secretKey: [OwnedBuffer] = [{}];
+    const status = native().pqcb_ml_kem_768_keypair(publicKey, secretKey);
+    throwIfError(status, "ML-KEM-768 keypair", "ML-KEM-768");
+
+    return {
+      publicKey: takeOwnedBuffer(publicKey[0], "ML-KEM-768 public key"),
+      secretKey: takeOwnedBuffer(secretKey[0], "ML-KEM-768 secret key"),
+    };
+  },
+
+  encapsulate(publicKey: Buffer): Encapsulation {
+    const ciphertext: [OwnedBuffer] = [{}];
+    const sharedSecret: [OwnedBuffer] = [{}];
+    const status = native().pqcb_ml_kem_768_encapsulate(
+      borrow(publicKey),
+      ciphertext,
+      sharedSecret,
+    );
+    throwIfError(status, "ML-KEM-768 encapsulate", "ML-KEM-768");
+
+    return {
+      ciphertext: takeOwnedBuffer(ciphertext[0], "ML-KEM-768 ciphertext"),
+      sharedSecret: takeOwnedBuffer(sharedSecret[0], "ML-KEM-768 shared secret"),
+    };
+  },
+
+  decapsulate(secretKey: Buffer, ciphertext: Buffer): Buffer {
+    const sharedSecret: [OwnedBuffer] = [{}];
+    const status = native().pqcb_ml_kem_768_decapsulate(
+      borrow(secretKey),
+      borrow(ciphertext),
+      sharedSecret,
+    );
+    throwIfError(status, "ML-KEM-768 decapsulate", "ML-KEM-768");
+    return takeOwnedBuffer(sharedSecret[0], "ML-KEM-768 shared secret");
+  },
+};
+
+export const signature = {
+  keypair(): SignatureKeypair {
+    const publicKey: [OwnedBuffer] = [{}];
+    const secretKey: [OwnedBuffer] = [{}];
+    const status = native().pqcb_ml_dsa_65_keypair(publicKey, secretKey);
+    throwIfError(status, "ML-DSA-65 keypair", "ML-DSA-65");
+
+    return {
+      publicKey: takeOwnedBuffer(publicKey[0], "ML-DSA-65 public key"),
+      secretKey: takeOwnedBuffer(secretKey[0], "ML-DSA-65 secret key"),
+    };
+  },
+
+  sign(secretKey: Buffer, message: Buffer): Buffer {
+    const signatureBytes: [OwnedBuffer] = [{}];
+    const status = native().pqcb_ml_dsa_65_sign(
+      borrow(secretKey),
+      borrow(message),
+      signatureBytes,
+    );
+    throwIfError(status, "ML-DSA-65 sign", "ML-DSA-65");
+    return takeOwnedBuffer(signatureBytes[0], "ML-DSA-65 signature");
+  },
+
+  verify(publicKey: Buffer, message: Buffer, signatureBytes: Buffer): true {
+    const status = native().pqcb_ml_dsa_65_verify(
+      borrow(publicKey),
+      borrow(message),
+      borrow(signatureBytes),
+    );
+    throwIfError(status, "ML-DSA-65 verify", "ML-DSA-65");
+    return true;
+  },
+};
+
+function borrow(buffer: Buffer): BorrowedBuffer {
+  return {
+    data: buffer,
+    len: buffer.length,
+  };
+}
+
+function takeOwnedBuffer(buffer: OwnedBuffer, field: string): Buffer {
+  if (!buffer.data || !buffer.len) {
+    throw new NullPointerError(field);
+  }
+
+  try {
+    return Buffer.from(koffi.decode(buffer.data, "uint8_t", buffer.len));
+  } finally {
+    native().pqcb_buffer_free(buffer);
+  }
 }
 
 function throwIfError(status: number, operation: string, algorithm?: string): void {
