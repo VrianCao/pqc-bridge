@@ -454,7 +454,8 @@ const fn validate_contract(
             | EnvelopeObjectType::SealedMessage
             | EnvelopeObjectType::FileEnvelope,
             EnvelopeAlgorithm::X25519MlKem768,
-        ) => Ok(()),
+        )
+        | (EnvelopeObjectType::SealedMessage, EnvelopeAlgorithm::MlKem768) => Ok(()),
         _ => Err(PqcbError::InvalidEnvelope {
             reason: "invalid object and algorithm combination",
         }),

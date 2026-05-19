@@ -18,9 +18,12 @@ getrandom = []
 zeroize = []
 
 [dependencies]
+chacha20poly1305.workspace = true
+hkdf.workspace = true
 ml-dsa.workspace = true
 ml-kem.workspace = true
 pqcb-core.workspace = true
+sha2.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]

@@ -43,6 +43,37 @@ Target use cases:
 - secrets delivered to a known recipient
 - small file envelopes
 
+Default composition:
+
+```text
+ML-KEM-768 shared secret + KEM ciphertext -> HKDF-SHA256 -> XChaCha20-Poly1305
+```
+
+Minimal RustCrypto-backed workflow:
+
+```rust
+let keys = pqcb_backend_rustcrypto::kem::keypair()?;
+let sealed = pqcb_backend_rustcrypto::sealed_box::seal(
+    &keys.public_key,
+    b"short secret",
+)?;
+let encoded = sealed.to_bytes()?;
+let decoded = pqcb_backend_rustcrypto::sealed_box::from_bytes(&encoded)?;
+let plaintext = pqcb_backend_rustcrypto::sealed_box::open(
+    &keys.secret_key,
+    &decoded,
+)?;
+assert_eq!(plaintext, b"short secret");
+# Ok::<(), pqcb_core::PqcbError>(())
+```
+
+Non-goals:
+
+- streaming encryption
+- large file chunking
+- sender authentication
+- replay protection
+
 ### SignedMessage
 
 Purpose: sign and verify messages with ML-DSA.
