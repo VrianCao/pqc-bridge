@@ -59,9 +59,14 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.24.x"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p pqcb-ffi
       - run: npm ci
         working-directory: bindings/node
       - run: npm run check
+        working-directory: bindings/node
+      - run: npm run smoke:abi
         working-directory: bindings/node
       - run: python -m compileall pqcb
         working-directory: bindings/python
