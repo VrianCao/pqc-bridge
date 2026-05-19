@@ -66,6 +66,97 @@ pub mod kem {
     }
 }
 
+/// Sealed-box facade backed by ML-KEM-768 and XChaCha20-Poly1305.
+pub mod sealed_box {
+    use chacha20poly1305::{
+        XChaCha20Poly1305,
+        aead::{Aead, AeadCore, KeyInit, OsRng, Payload},
+    };
+    use hkdf::Hkdf;
+    use pqcb_core::{PqcbError, PublicKey, Result, SEALED_BOX_NONCE_LEN, SealedBox, SecretKey};
+    use sha2::Sha256;
+    use zeroize::Zeroizing;
+
+    const AAD: &[u8] = b"PQCB SealedBox v1 ML-KEM-768 XChaCha20-Poly1305";
+    const HKDF_INFO: &[u8] = b"PQCB SealedBox v1 ML-KEM-768 AEAD key";
+
+    /// Seals `plaintext` to `public_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation, backend, KDF, or AEAD errors.
+    pub fn seal(public_key: &PublicKey, plaintext: &[u8]) -> Result<SealedBox> {
+        let encapsulation = crate::kem::encapsulate(public_key)?;
+        let key = derive_key(
+            encapsulation.ciphertext(),
+            encapsulation.expose_shared_secret(),
+        )?;
+        let cipher = XChaCha20Poly1305::new((&*key).into());
+        let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+        let ciphertext = cipher
+            .encrypt(
+                &nonce,
+                Payload {
+                    msg: plaintext,
+                    aad: AAD,
+                },
+            )
+            .map_err(|_| PqcbError::CryptoFailure {
+                reason: "SealedBox encryption failed",
+            })?;
+
+        let mut nonce_bytes = [0u8; SEALED_BOX_NONCE_LEN];
+        nonce_bytes.copy_from_slice(nonce.as_slice());
+
+        SealedBox::from_parts(encapsulation.ciphertext(), &nonce_bytes, &ciphertext)
+    }
+
+    /// Opens `sealed_box` with `secret_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation, backend, KDF, or AEAD errors. Wrong keys and tampered
+    /// ciphertexts fail closed.
+    pub fn open(secret_key: &SecretKey, sealed_box: &SealedBox) -> Result<Vec<u8>> {
+        let shared_secret = crate::kem::decapsulate(secret_key, sealed_box.kem_ciphertext())?;
+        let key = derive_key(sealed_box.kem_ciphertext(), shared_secret.as_slice())?;
+        let cipher = XChaCha20Poly1305::new((&*key).into());
+
+        let nonce = chacha20poly1305::XNonce::from_slice(sealed_box.nonce());
+
+        cipher
+            .decrypt(
+                nonce,
+                Payload {
+                    msg: sealed_box.ciphertext(),
+                    aad: AAD,
+                },
+            )
+            .map_err(|_| PqcbError::CryptoFailure {
+                reason: "SealedBox open failed",
+            })
+    }
+
+    /// Deserializes a sealed box from deterministic bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the sealed box envelope is malformed.
+    pub fn from_bytes(bytes: &[u8]) -> Result<SealedBox> {
+        SealedBox::from_bytes(bytes)
+    }
+
+    fn derive_key(kem_ciphertext: &[u8], shared_secret: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+        let hkdf = Hkdf::<Sha256>::new(Some(kem_ciphertext), shared_secret);
+        let mut key = Zeroizing::new([0u8; 32]);
+        hkdf.expand(HKDF_INFO, key.as_mut())
+            .map_err(|_| PqcbError::CryptoFailure {
+                reason: "SealedBox key derivation failed",
+            })?;
+        Ok(key)
+    }
+}
+
 /// Signature primitive facade backed by the default `RustCrypto` provider.
 pub mod signature {
     use pqcb_core::{PublicKey, Result, SecretKey, SignatureBackend, SignatureKeyPair};
@@ -314,9 +405,11 @@ fn verifying_key(bytes: &[u8]) -> VerifyingKey<MlDsa65> {
 
 #[cfg(test)]
 mod tests {
+    use crate::sealed_box;
+
     use pqcb_core::{
-        KemAlgorithm, KemBackend, KeyAlgorithm, PqcbError, PublicKey, SignatureAlgorithm,
-        SignatureBackend, SignedMessage, Verification,
+        KemAlgorithm, KemBackend, KeyAlgorithm, PqcbError, PublicKey, SealedBox,
+        SignatureAlgorithm, SignatureBackend, SignedMessage, Verification,
         algorithms::{
             ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SECRET_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
             ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, ML_KEM_768_SECRET_KEY_LEN,
@@ -539,5 +632,59 @@ mod tests {
             signed.verify(&backend, &verifying_keypair.public_key),
             Err(PqcbError::VerificationFailed)
         );
+    }
+
+    #[test]
+    fn sealed_box_round_trip_and_tamper_detection() {
+        let backend = RustCryptoBackend::new();
+        let keypair = KemBackend::keypair(&backend).expect("generate ML-KEM keypair");
+        let sealed = sealed_box::seal(&keypair.public_key, b"payload").expect("seal payload");
+        let encoded = sealed.to_bytes().expect("serialize sealed box");
+        let decoded = SealedBox::from_bytes(&encoded).expect("deserialize sealed box");
+        let opened = sealed_box::open(&keypair.secret_key, &decoded).expect("open sealed box");
+
+        assert_eq!(opened, b"payload");
+        assert_eq!(decoded, sealed);
+    }
+
+    #[test]
+    fn sealed_box_wrong_key_fails_closed() {
+        let backend = RustCryptoBackend::new();
+        let recipient = KemBackend::keypair(&backend).expect("generate recipient keypair");
+        let wrong = KemBackend::keypair(&backend).expect("generate wrong keypair");
+        let sealed = sealed_box::seal(&recipient.public_key, b"payload").expect("seal payload");
+
+        assert!(matches!(
+            sealed_box::open(&wrong.secret_key, &sealed),
+            Err(PqcbError::CryptoFailure { .. })
+        ));
+    }
+
+    #[test]
+    fn sealed_box_tampered_ciphertext_fails_closed() {
+        let backend = RustCryptoBackend::new();
+        let keypair = KemBackend::keypair(&backend).expect("generate ML-KEM keypair");
+        let sealed = sealed_box::seal(&keypair.public_key, b"payload").expect("seal payload");
+        let mut tampered_ciphertext = sealed.ciphertext().to_vec();
+        tampered_ciphertext[0] ^= 0xff;
+        let tampered = SealedBox::from_parts(
+            sealed.kem_ciphertext(),
+            sealed.nonce(),
+            &tampered_ciphertext,
+        )
+        .expect("rebuild tampered sealed box");
+
+        assert!(matches!(
+            sealed_box::open(&keypair.secret_key, &tampered),
+            Err(PqcbError::CryptoFailure { .. })
+        ));
+    }
+
+    #[test]
+    fn sealed_box_rejects_malformed_envelope() {
+        assert!(matches!(
+            sealed_box::from_bytes(b"bad"),
+            Err(PqcbError::InvalidEnvelope { .. })
+        ));
     }
 }

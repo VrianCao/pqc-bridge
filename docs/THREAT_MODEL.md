@@ -68,6 +68,18 @@ envelope material must use authenticated encryption or an equivalent
 high-level construction before the envelope is accepted as confidential or
 integrity-protected.
 
+## SealedBox Security Notes
+
+`SealedBox` is a one-shot encryption workflow for small payloads. It derives an
+AEAD key from the ML-KEM-768 shared secret and KEM ciphertext with HKDF-SHA256,
+then encrypts with XChaCha20-Poly1305. The raw KEM shared secret must not be
+used directly as an encryption key.
+
+Sealed boxes provide recipient confidentiality and ciphertext integrity for the
+encoded payload. They do not provide sender authentication, replay protection,
+large-file streaming, or application-level authorization. Wrong recipient keys,
+malformed envelopes, and tampered AEAD ciphertexts must fail closed.
+
 ## Side-Channel Position
 
 PQC Bridge must not claim side-channel resistance unless the backend and build

@@ -64,7 +64,7 @@ Parsers must compare the input length to this value exactly.
 
 | ID | Algorithm/profile | Valid object types |
 | ---: | --- | --- |
-| `0x0001` | `ML-KEM-768` | Public key, secret key, ciphertext. |
+| `0x0001` | `ML-KEM-768` | Public key, secret key, ciphertext, sealed message. |
 | `0x0002` | `ML-DSA-65` | Public key, secret key, signature. |
 | `0x0101` | `X25519-ML-KEM-768` | Public key, secret key, sealed message, file envelope. |
 
