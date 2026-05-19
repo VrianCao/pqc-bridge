@@ -43,6 +43,31 @@ This document defines the security boundaries for PQC Bridge.
 - downgrade protection in high-level protocols
 - dependency review before release
 
+## Envelope Parser Failure Modes
+
+Versioned envelope parsers are part of the security boundary. They must reject
+malformed input before returning key, ciphertext, signature, or sealed-message
+material to callers. Required rejection cases include:
+
+- invalid magic or unsupported envelope version
+- unknown object type, algorithm ID, or invalid object/algorithm pairing
+- nonzero reserved flags or unknown required flags
+- truncated input, trailing bytes, or `material_length` values that do not match
+  the exact input length
+- primitive material whose length differs from the canonical algorithm length
+- checksum or authentication failure
+- secret-key envelopes that omit the `contains_secret` handling signal
+
+Unknown fields in the outer v1 envelope are not allowed. Future metadata must be
+authenticated inside high-level material formats or placed in a new envelope
+version. Parsers must fail closed instead of skipping unrecognized bytes.
+
+Envelope checksums detect accidental corruption for public objects only. They do
+not authenticate attacker-controlled data. Secret-key, sealed-message, and file
+envelope material must use authenticated encryption or an equivalent
+high-level construction before the envelope is accepted as confidential or
+integrity-protected.
+
 ## Side-Channel Position
 
 PQC Bridge must not claim side-channel resistance unless the backend and build
