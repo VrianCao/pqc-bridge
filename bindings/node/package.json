@@ -13,11 +13,13 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "examples",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
+    "pack:dry-run": "npm pack --dry-run",
     "smoke:abi": "npm run build && node dist/smoke-abi.js",
     "smoke:primitives": "npm run build && node dist/smoke-primitives.js"
   },
