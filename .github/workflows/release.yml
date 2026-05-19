@@ -120,19 +120,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [rust, bindings, platform-bindings, swift, package-dry-run]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v6
       - run: git archive --format=tar.gz --output=pqc-bridge-source.tar.gz HEAD
-      - run: shasum -a 256 pqc-bridge-source.tar.gz > pqc-bridge-source.tar.gz.sha256
       - uses: anchore/sbom-action@v0
         with:
           path: .
           format: spdx-json
           output-file: sbom.spdx.json
+      - run: shasum -a 256 pqc-bridge-source.tar.gz sbom.spdx.json > SHA256SUMS
+      - name: Attest release material provenance
+        uses: actions/attest@v4
+        with:
+          subject-checksums: SHA256SUMS
+      - name: Attest source SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: pqc-bridge-source.tar.gz
+          sbom-path: sbom.spdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: release-source-materials
           path: |
             pqc-bridge-source.tar.gz
-            pqc-bridge-source.tar.gz.sha256
+            SHA256SUMS
             sbom.spdx.json
