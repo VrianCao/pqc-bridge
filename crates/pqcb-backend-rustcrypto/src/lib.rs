@@ -977,4 +977,87 @@ mod tests {
             Err(PqcbError::CryptoFailure { .. })
         ));
     }
+
+    #[test]
+    fn hybrid_context_changes_are_transcript_bound() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let encapsulation =
+            hybrid::encapsulate(&responder.public_key, b"session nonce 1").expect("encapsulate");
+        let original = hybrid::decapsulate(
+            &responder.secret_key,
+            &responder.public_key,
+            &encapsulation,
+            b"session nonce 1",
+        )
+        .expect("decapsulate original context");
+        let replay_context = hybrid::decapsulate(
+            &responder.secret_key,
+            &responder.public_key,
+            &encapsulation,
+            b"session nonce 2",
+        )
+        .expect("decapsulate replay under different context");
+
+        assert_eq!(encapsulation.expose_shared_secret(), original.as_slice());
+        assert_ne!(original.as_slice(), replay_context.as_slice());
+    }
+
+    #[test]
+    fn hybrid_altered_initiator_key_changes_derived_secret() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let encapsulation =
+            hybrid::encapsulate(&responder.public_key, b"pqcb-test context").expect("encapsulate");
+        let mut altered_initiator = *encapsulation.initiator_x25519_public_key();
+        altered_initiator[0] ^= 0x80;
+        let altered = HybridEncapsulation::new(
+            altered_initiator,
+            encapsulation.kem_ciphertext(),
+            vec![0; HYBRID_SHARED_SECRET_LEN],
+        )
+        .expect("rebuild altered encapsulation");
+        let decapsulated = hybrid::decapsulate(
+            &responder.secret_key,
+            &responder.public_key,
+            &altered,
+            b"pqcb-test context",
+        )
+        .expect("decapsulate altered setup");
+
+        assert_ne!(
+            encapsulation.expose_shared_secret(),
+            decapsulated.as_slice()
+        );
+    }
+
+    #[test]
+    fn hybrid_swapped_responder_public_key_fails_closed() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let other = hybrid::keypair().expect("generate other hybrid keypair");
+        let encapsulation =
+            hybrid::encapsulate(&responder.public_key, b"pqcb-test context").expect("encapsulate");
+
+        assert!(matches!(
+            hybrid::decapsulate(
+                &responder.secret_key,
+                &other.public_key,
+                &encapsulation,
+                b"pqcb-test context",
+            ),
+            Err(PqcbError::CryptoFailure { .. })
+        ));
+    }
+
+    #[test]
+    fn hybrid_downgrade_algorithm_names_are_rejected() {
+        assert!("X25519".parse::<pqcb_core::HybridKemAlgorithm>().is_err());
+        assert!(
+            "ML-KEM-768"
+                .parse::<pqcb_core::HybridKemAlgorithm>()
+                .is_err()
+        );
+        assert_eq!(
+            "X25519-ML-KEM-768".parse::<pqcb_core::HybridKemAlgorithm>(),
+            Ok(pqcb_core::HybridKemAlgorithm::X25519MlKem768)
+        );
+    }
 }
