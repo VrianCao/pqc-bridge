@@ -122,7 +122,7 @@ type NativeLibrary = {
     message: BorrowedBuffer,
     signature: BorrowedBuffer,
   ) => number;
-  pqcb_buffer_free: (buffer: OwnedBuffer) => void;
+  pqcb_buffer_free_parts: (data: bigint, len: number) => void;
 };
 
 type BorrowedBuffer = {
@@ -214,9 +214,10 @@ function native(): NativeLibrary {
         borrowedBuffer,
         borrowedBuffer,
       ]) as NativeLibrary["pqcb_ml_dsa_65_verify"],
-      pqcb_buffer_free: library.func("pqcb_buffer_free", "void", [
-        ownedBuffer,
-      ]) as NativeLibrary["pqcb_buffer_free"],
+      pqcb_buffer_free_parts: library.func("pqcb_buffer_free_parts", "void", [
+        "void *",
+        "size_t",
+      ]) as NativeLibrary["pqcb_buffer_free_parts"],
     };
     return loadedNative;
   } catch (error) {
@@ -347,7 +348,7 @@ function takeOwnedBuffer(buffer: OwnedBuffer, field: string): Buffer {
   try {
     return Buffer.from(koffi.decode(buffer.data, "uint8_t", buffer.len));
   } finally {
-    native().pqcb_buffer_free(buffer);
+    native().pqcb_buffer_free_parts(buffer.data, buffer.len);
   }
 }
 

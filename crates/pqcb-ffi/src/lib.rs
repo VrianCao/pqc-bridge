@@ -7,10 +7,13 @@
 use core::ptr;
 use core::slice;
 use std::panic::{self, AssertUnwindSafe};
+use std::thread;
 
 use pqcb_backend_rustcrypto::{kem, signature};
 use pqcb_core::PqcbError;
 use pqcb_core::version::{ABI_VERSION, VERSION};
+
+const FFI_CRYPTO_STACK_SIZE: usize = 8 * 1024 * 1024;
 
 /// Status code returned by C ABI functions.
 #[repr(u32)]
@@ -271,7 +274,8 @@ pub unsafe extern "C" fn pqcb_ml_dsa_65_keypair(
     clear_output(secret_key_out);
 
     catch_status(|| {
-        let keypair = signature::keypair().map_err(|error| status_from_error(&error))?;
+        let keypair =
+            run_on_crypto_stack(signature::keypair).map_err(|error| status_from_error(&error))?;
         write_output(public_key_out, keypair.public_key.into_bytes());
         write_output(secret_key_out, keypair.secret_key.expose_secret().to_vec());
         Ok(())
@@ -296,10 +300,13 @@ pub unsafe extern "C" fn pqcb_ml_dsa_65_sign(
     clear_output(signature_out);
 
     catch_status(|| {
-        let secret_key = signature::secret_key(borrowed(secret_key)?.to_vec());
-        let message = borrowed(message)?;
-        let signature_bytes =
-            signature::sign(&secret_key, message).map_err(|error| status_from_error(&error))?;
+        let secret_key_bytes = borrowed(secret_key)?.to_vec();
+        let message = borrowed(message)?.to_vec();
+        let signature_bytes = run_on_crypto_stack(move || {
+            let secret_key = signature::secret_key(secret_key_bytes);
+            signature::sign(&secret_key, &message)
+        })
+        .map_err(|error| status_from_error(&error))?;
         write_output(signature_out, signature_bytes);
         Ok(())
     })
@@ -317,11 +324,14 @@ pub unsafe extern "C" fn pqcb_ml_dsa_65_verify(
     signature_bytes: PqcbBuffer,
 ) -> PqcbStatus {
     catch_status(|| {
-        let public_key = signature::public_key(borrowed(public_key)?.to_vec());
-        let message = borrowed(message)?;
-        let signature_bytes = borrowed(signature_bytes)?;
-        signature::verify(&public_key, message, signature_bytes)
-            .map_err(|error| status_from_error(&error))?;
+        let public_key_bytes = borrowed(public_key)?.to_vec();
+        let message = borrowed(message)?.to_vec();
+        let signature_bytes = borrowed(signature_bytes)?.to_vec();
+        run_on_crypto_stack(move || {
+            let public_key = signature::public_key(public_key_bytes);
+            signature::verify(&public_key, &message, &signature_bytes)
+        })
+        .map_err(|error| status_from_error(&error))?;
         Ok(())
     })
 }
@@ -345,6 +355,15 @@ pub extern "C" fn pqcb_buffer_free(buffer: PqcbOwnedBuffer) {
             buffer.len,
         )));
     }
+}
+
+/// Frees a library-owned buffer by pointer and length.
+///
+/// This is equivalent to `pqcb_buffer_free(PqcbOwnedBuffer { data, len })` and
+/// is provided for FFI callers that cannot safely pass small structs by value.
+#[unsafe(no_mangle)]
+pub extern "C" fn pqcb_buffer_free_parts(data: *mut u8, len: usize) {
+    pqcb_buffer_free(PqcbOwnedBuffer { data, len });
 }
 
 /// Converts a vector into a C ABI owned buffer.
@@ -397,6 +416,25 @@ fn catch_status(operation: impl FnOnce() -> Result<(), PqcbStatus>) -> PqcbStatu
         Ok(Err(status)) => status,
         Err(_) => PqcbStatus::Panic,
     }
+}
+
+fn run_on_crypto_stack<T>(
+    operation: impl FnOnce() -> Result<T, PqcbError> + Send + 'static,
+) -> Result<T, PqcbError>
+where
+    T: Send + 'static,
+{
+    thread::Builder::new()
+        .name("pqcb-ffi-crypto".to_owned())
+        .stack_size(FFI_CRYPTO_STACK_SIZE)
+        .spawn(operation)
+        .map_err(|_| PqcbError::CryptoFailure {
+            reason: "spawn crypto worker",
+        })?
+        .join()
+        .map_err(|_| PqcbError::CryptoFailure {
+            reason: "join crypto worker",
+        })?
 }
 
 fn status_from_error(error: &PqcbError) -> PqcbStatus {
@@ -483,6 +521,16 @@ mod tests {
     #[test]
     fn freeing_empty_buffer_is_noop() {
         pqcb_buffer_free(PqcbOwnedBuffer::empty());
+        pqcb_buffer_free_parts(ptr::null_mut(), 0);
+    }
+
+    #[test]
+    fn owned_buffer_parts_round_trip_can_be_freed() {
+        let buffer = owned_buffer_from_vec(vec![4, 5, 6]);
+
+        assert!(!buffer.data.is_null());
+        assert_eq!(buffer.len, 3);
+        pqcb_buffer_free_parts(buffer.data, buffer.len);
     }
 
     #[test]
