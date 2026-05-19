@@ -25,6 +25,18 @@ Default profile:
 X25519 + ML-KEM-768 -> HKDF -> AEAD keys
 ```
 
+Current status:
+
+- core state machine skeleton exists
+- hybrid composition is not yet implemented
+- attempts to use the hybrid path fail closed until v0.5
+
+Non-goals for v0.4:
+
+- final migration composition
+- downgrade to PQ-only or classical-only mode
+- streaming message encryption
+
 Target use cases:
 
 - app-to-server communication

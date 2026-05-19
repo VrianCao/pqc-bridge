@@ -80,6 +80,16 @@ encoded payload. They do not provide sender authentication, replay protection,
 large-file streaming, or application-level authorization. Wrong recipient keys,
 malformed envelopes, and tampered AEAD ciphertexts must fail closed.
 
+## SecureSession Skeleton Notes
+
+The v0.4 `SecureSession` type is a state-machine skeleton only. It represents
+setup, ready, and closed states so bindings can align on lifecycle semantics
+before the v0.5 hybrid composition lands.
+
+The skeleton must not silently downgrade to PQ-only or classical-only behavior.
+Until X25519 + ML-KEM-768 composition is implemented and tested, hybrid session
+setup returns `BackendUnavailable`.
+
 ## Side-Channel Position
 
 PQC Bridge must not claim side-channel resistance unless the backend and build
