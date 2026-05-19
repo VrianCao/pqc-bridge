@@ -7,6 +7,7 @@
 //! concrete cryptographic providers must implement.
 
 pub mod algorithms;
+pub mod envelope;
 pub mod errors;
 pub mod kem;
 pub mod keys;
@@ -16,6 +17,11 @@ pub mod traits;
 pub mod version;
 
 pub use algorithms::{HybridKemAlgorithm, KemAlgorithm, KeyAlgorithm, SignatureAlgorithm};
+pub use envelope::{
+    Envelope, EnvelopeAlgorithm, EnvelopeFlags, EnvelopeObjectType, encode_ml_dsa_65_public_key,
+    encode_ml_dsa_65_secret_key, encode_ml_dsa_65_signature, encode_ml_kem_768_ciphertext,
+    encode_ml_kem_768_public_key, encode_ml_kem_768_secret_key,
+};
 pub use errors::{PqcbError, Result};
 pub use keys::{PublicKey, SecretKey};
 pub use traits::{
