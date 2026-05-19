@@ -83,6 +83,9 @@ cargo run -p pqcb -- algorithms
 Current CLI output is intentionally limited to metadata and planned algorithms
 until a reviewed backend is integrated.
 
+Runnable Rust examples for the high-level APIs are listed in
+[examples/README.md](examples/README.md).
+
 ## API Shape
 
 PQC Bridge will expose two API layers.

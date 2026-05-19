@@ -13,6 +13,18 @@ Build the C ABI dynamic library before running binding examples:
 cargo build -p pqcb-ffi
 ```
 
+High-level Rust examples:
+
+```sh
+cargo run -p pqcb-backend-rustcrypto --example signed_message
+cargo run -p pqcb-backend-rustcrypto --example sealed_box
+cargo run -p pqcb-core --example secure_session
+```
+
+`secure_session` demonstrates the v0.4 state-machine skeleton only. The final
+hybrid X25519 + ML-KEM-768 composition remains planned for v0.5 and currently
+fails closed when requested.
+
 Package and smoke checks:
 
 - Node.js: `npm run check`, `npm run smoke:abi`, `npm run smoke:primitives`,
@@ -22,14 +34,10 @@ Package and smoke checks:
   from `bindings/python`
 - Go: `go test ./...` and `go run ./examples/primitives` from `bindings/go`
 
-Planned high-level examples:
+Planned future examples:
 
-- `secure-session-node`
-- `secure-session-python`
-- `secure-session-go`
-- `signed-message`
-- `sealed-box`
-- `file-envelope`
-- `ffi-c`
+- secure-session binding examples after v0.5 hybrid composition
+- file-envelope
+- ffi-c
 
 Examples must not use mock cryptography.
