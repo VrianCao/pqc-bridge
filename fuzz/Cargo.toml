@@ -10,10 +10,18 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 pqcb-core = { path = "../crates/pqcb-core" }
+pqcb-ffi = { path = "../crates/pqcb-ffi" }
 
 [[bin]]
 name = "envelope_decode"
 path = "fuzz_targets/envelope_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ffi_primitives"
+path = "fuzz_targets/ffi_primitives.rs"
 test = false
 doc = false
 bench = false
