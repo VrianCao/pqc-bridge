@@ -2,5 +2,12 @@
 
 Go bindings for PQC Bridge.
 
-This module is a v0.1 scaffold. It intentionally fails closed until a reviewed
-cryptographic backend is integrated.
+This module links the local PQC Bridge C ABI dynamic library for development
+smoke tests. Build the native library from the repository root first:
+
+```sh
+cargo build -p pqcb-ffi
+go test ./...
+```
+
+The cgo linker flags point at `../../target/debug` from this module.
