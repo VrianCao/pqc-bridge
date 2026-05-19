@@ -66,6 +66,202 @@ pub mod kem {
     }
 }
 
+/// Hybrid X25519 + ML-KEM-768 facade backed by the default `RustCrypto`
+/// provider.
+pub mod hybrid {
+    use hkdf::Hkdf;
+    use pqcb_core::{
+        HYBRID_PROFILE_NAME, HYBRID_SHARED_SECRET_LEN, HybridEncapsulation, HybridKeyPair,
+        HybridPublicKey, HybridSecretKey, PqcbError, Result, X25519_PUBLIC_KEY_LEN,
+    };
+    use sha2::{Digest, Sha256};
+    use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
+    use zeroize::Zeroizing;
+
+    const TRANSCRIPT_DOMAIN: &[u8] = b"PQCB Hybrid v1 transcript";
+    const HKDF_INFO: &[u8] = b"PQCB Hybrid v1 X25519-ML-KEM-768 shared secret";
+
+    /// Generates responder key material for the `X25519-ML-KEM-768` profile.
+    ///
+    /// # Errors
+    ///
+    /// Returns backend errors if ML-KEM key generation fails.
+    pub fn keypair() -> Result<HybridKeyPair> {
+        let x25519_secret = StaticSecret::random();
+        let x25519_public = X25519PublicKey::from(&x25519_secret);
+        let kem_keypair = crate::kem::keypair()?;
+
+        Ok(HybridKeyPair {
+            public_key: HybridPublicKey::from_parts(
+                x25519_public.to_bytes(),
+                kem_keypair.public_key,
+            )?,
+            secret_key: HybridSecretKey::from_parts(
+                x25519_secret.to_bytes(),
+                kem_keypair.secret_key,
+            )?,
+        })
+    }
+
+    /// Encapsulates a hybrid shared secret to `responder_public_key`.
+    ///
+    /// `context` is transcript-bound and should include the embedding protocol,
+    /// version, peer binding, and freshness material.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation, backend, or KDF errors.
+    pub fn encapsulate(
+        responder_public_key: &HybridPublicKey,
+        context: &[u8],
+    ) -> Result<HybridEncapsulation> {
+        let initiator_secret = StaticSecret::random();
+        let initiator_public = X25519PublicKey::from(&initiator_secret);
+        let responder_x25519_public =
+            X25519PublicKey::from(*responder_public_key.x25519_public_key());
+        let x25519_shared = initiator_secret.diffie_hellman(&responder_x25519_public);
+        reject_all_zero_x25519(x25519_shared.as_bytes())?;
+
+        let kem_encapsulation = crate::kem::encapsulate(responder_public_key.kem_public_key())?;
+        let shared_secret = derive_shared_secret(
+            initiator_public.as_bytes(),
+            responder_public_key,
+            kem_encapsulation.ciphertext(),
+            context,
+            x25519_shared.as_bytes(),
+            kem_encapsulation.expose_shared_secret(),
+        )?;
+
+        HybridEncapsulation::new(
+            initiator_public.to_bytes(),
+            kem_encapsulation.ciphertext(),
+            shared_secret.to_vec(),
+        )
+    }
+
+    /// Decapsulates a hybrid shared secret from an initiator setup.
+    ///
+    /// The supplied `responder_public_key` is transcript-bound and must match
+    /// the X25519 public key derived from `responder_secret_key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns validation, backend, or KDF errors. Component failure is
+    /// fail-closed and never returns a partial secret.
+    pub fn decapsulate(
+        responder_secret_key: &HybridSecretKey,
+        responder_public_key: &HybridPublicKey,
+        encapsulation: &HybridEncapsulation,
+        context: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>> {
+        let responder_secret = StaticSecret::from(*responder_secret_key.expose_x25519_secret());
+        let derived_public = X25519PublicKey::from(&responder_secret);
+        if derived_public.as_bytes() != responder_public_key.x25519_public_key() {
+            return Err(PqcbError::CryptoFailure {
+                reason: "hybrid responder public key mismatch",
+            });
+        }
+
+        let initiator_public = X25519PublicKey::from(*encapsulation.initiator_x25519_public_key());
+        let x25519_shared = responder_secret.diffie_hellman(&initiator_public);
+        reject_all_zero_x25519(x25519_shared.as_bytes())?;
+
+        let kem_shared = crate::kem::decapsulate(
+            responder_secret_key.kem_secret_key(),
+            encapsulation.kem_ciphertext(),
+        )?;
+
+        derive_shared_secret(
+            encapsulation.initiator_x25519_public_key(),
+            responder_public_key,
+            encapsulation.kem_ciphertext(),
+            context,
+            x25519_shared.as_bytes(),
+            kem_shared.as_slice(),
+        )
+    }
+
+    fn reject_all_zero_x25519(shared_secret: &[u8; X25519_PUBLIC_KEY_LEN]) -> Result<()> {
+        if shared_secret.iter().all(|byte| *byte == 0) {
+            return Err(PqcbError::CryptoFailure {
+                reason: "invalid X25519 shared secret",
+            });
+        }
+
+        Ok(())
+    }
+
+    fn derive_shared_secret(
+        initiator_x25519_public_key: &[u8; X25519_PUBLIC_KEY_LEN],
+        responder_public_key: &HybridPublicKey,
+        kem_ciphertext: &[u8],
+        context: &[u8],
+        x25519_shared_secret: &[u8; X25519_PUBLIC_KEY_LEN],
+        kem_shared_secret: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>> {
+        if kem_shared_secret.len() != HYBRID_SHARED_SECRET_LEN {
+            return Err(PqcbError::invalid_length(
+                "hybrid.ml_kem_shared_secret",
+                HYBRID_SHARED_SECRET_LEN,
+                kem_shared_secret.len(),
+            ));
+        }
+
+        let transcript_hash = transcript_hash(
+            initiator_x25519_public_key,
+            responder_public_key,
+            kem_ciphertext,
+            context,
+        )?;
+        let mut input_keying_material = Zeroizing::new(Vec::with_capacity(
+            X25519_PUBLIC_KEY_LEN + kem_shared_secret.len(),
+        ));
+        input_keying_material.extend_from_slice(x25519_shared_secret);
+        input_keying_material.extend_from_slice(kem_shared_secret);
+
+        let hkdf = Hkdf::<Sha256>::new(Some(&transcript_hash), input_keying_material.as_slice());
+        let mut shared_secret = Zeroizing::new(vec![0u8; HYBRID_SHARED_SECRET_LEN]);
+        hkdf.expand(HKDF_INFO, shared_secret.as_mut())
+            .map_err(|_| PqcbError::CryptoFailure {
+                reason: "hybrid key derivation failed",
+            })?;
+
+        Ok(shared_secret)
+    }
+
+    fn transcript_hash(
+        initiator_x25519_public_key: &[u8; X25519_PUBLIC_KEY_LEN],
+        responder_public_key: &HybridPublicKey,
+        kem_ciphertext: &[u8],
+        context: &[u8],
+    ) -> Result<[u8; 32]> {
+        let mut hasher = Sha256::new();
+        hash_field(&mut hasher, TRANSCRIPT_DOMAIN)?;
+        hash_field(&mut hasher, HYBRID_PROFILE_NAME.as_bytes())?;
+        hash_field(&mut hasher, initiator_x25519_public_key)?;
+        hash_field(&mut hasher, responder_public_key.x25519_public_key())?;
+        hash_field(
+            &mut hasher,
+            responder_public_key.kem_public_key().as_bytes(),
+        )?;
+        hash_field(&mut hasher, kem_ciphertext)?;
+        hash_field(&mut hasher, context)?;
+
+        Ok(hasher.finalize().into())
+    }
+
+    fn hash_field(hasher: &mut Sha256, field: &[u8]) -> Result<()> {
+        let length = u32::try_from(field.len()).map_err(|_| PqcbError::InvalidLength {
+            field: "hybrid.transcript_field",
+            expected: u32::MAX as usize,
+            actual: field.len(),
+        })?;
+        hasher.update(length.to_be_bytes());
+        hasher.update(field);
+        Ok(())
+    }
+}
+
 /// Sealed-box facade backed by ML-KEM-768 and XChaCha20-Poly1305.
 pub mod sealed_box {
     use chacha20poly1305::{
@@ -405,11 +601,12 @@ fn verifying_key(bytes: &[u8]) -> VerifyingKey<MlDsa65> {
 
 #[cfg(test)]
 mod tests {
-    use crate::sealed_box;
+    use crate::{hybrid, sealed_box};
 
     use pqcb_core::{
-        KemAlgorithm, KemBackend, KeyAlgorithm, PqcbError, PublicKey, SealedBox,
-        SignatureAlgorithm, SignatureBackend, SignedMessage, Verification,
+        HYBRID_SHARED_SECRET_LEN, HybridEncapsulation, KemAlgorithm, KemBackend, KeyAlgorithm,
+        PqcbError, PublicKey, SealedBox, SignatureAlgorithm, SignatureBackend, SignedMessage,
+        Verification, X25519_PUBLIC_KEY_LEN,
         algorithms::{
             ML_DSA_65_PUBLIC_KEY_LEN, ML_DSA_65_SECRET_KEY_LEN, ML_DSA_65_SIGNATURE_LEN,
             ML_KEM_768_CIPHERTEXT_LEN, ML_KEM_768_PUBLIC_KEY_LEN, ML_KEM_768_SECRET_KEY_LEN,
@@ -685,6 +882,99 @@ mod tests {
         assert!(matches!(
             sealed_box::from_bytes(b"bad"),
             Err(PqcbError::InvalidEnvelope { .. })
+        ));
+    }
+
+    #[test]
+    fn hybrid_encapsulate_decapsulate_round_trip() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let encapsulation =
+            hybrid::encapsulate(&responder.public_key, b"pqcb-test context").expect("encapsulate");
+        let decapsulated = hybrid::decapsulate(
+            &responder.secret_key,
+            &responder.public_key,
+            &encapsulation,
+            b"pqcb-test context",
+        )
+        .expect("decapsulate");
+
+        assert_eq!(
+            encapsulation.expose_shared_secret().len(),
+            HYBRID_SHARED_SECRET_LEN
+        );
+        assert_eq!(decapsulated.len(), HYBRID_SHARED_SECRET_LEN);
+        assert_eq!(
+            encapsulation.expose_shared_secret(),
+            decapsulated.as_slice()
+        );
+    }
+
+    #[test]
+    fn hybrid_component_failure_fails_closed() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let encapsulation =
+            hybrid::encapsulate(&responder.public_key, b"pqcb-test context").expect("encapsulate");
+
+        let truncated = HybridEncapsulation::new(
+            *encapsulation.initiator_x25519_public_key(),
+            &encapsulation.kem_ciphertext()[..ML_KEM_768_CIPHERTEXT_LEN - 1],
+            vec![0; HYBRID_SHARED_SECRET_LEN],
+        );
+        assert_eq!(
+            truncated,
+            Err(PqcbError::invalid_length(
+                "ml_kem_768.ciphertext",
+                ML_KEM_768_CIPHERTEXT_LEN,
+                ML_KEM_768_CIPHERTEXT_LEN - 1,
+            ))
+        );
+
+        let mut tampered = encapsulation.kem_ciphertext().to_vec();
+        tampered[0] ^= 0xff;
+        let tampered = HybridEncapsulation::new(
+            *encapsulation.initiator_x25519_public_key(),
+            tampered,
+            vec![0; HYBRID_SHARED_SECRET_LEN],
+        )
+        .expect("rebuild tampered encapsulation");
+
+        let decapsulated = hybrid::decapsulate(
+            &responder.secret_key,
+            &responder.public_key,
+            &tampered,
+            b"pqcb-test context",
+        )
+        .expect("decapsulation still returns an implicit-rejection ML-KEM secret");
+
+        assert_ne!(
+            encapsulation.expose_shared_secret(),
+            decapsulated.as_slice()
+        );
+    }
+
+    #[test]
+    fn hybrid_debug_output_redacts_secret() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let encapsulation =
+            hybrid::encapsulate(&responder.public_key, b"pqcb-test context").expect("encapsulate");
+        let debug = format!("{encapsulation:?}");
+
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains(&format!("{:?}", encapsulation.expose_shared_secret())));
+    }
+
+    #[test]
+    fn hybrid_rejects_invalid_x25519_public_key() {
+        let responder = hybrid::keypair().expect("generate hybrid keypair");
+        let invalid_public = pqcb_core::HybridPublicKey::from_parts(
+            [0; X25519_PUBLIC_KEY_LEN],
+            responder.public_key.kem_public_key().clone(),
+        )
+        .expect("hybrid public key shape is valid");
+
+        assert!(matches!(
+            hybrid::encapsulate(&invalid_public, b"pqcb-test context"),
+            Err(PqcbError::CryptoFailure { .. })
         ));
     }
 }

@@ -9,6 +9,7 @@
 pub mod algorithms;
 pub mod envelope;
 pub mod errors;
+pub mod hybrid;
 pub mod kem;
 pub mod keys;
 pub mod prelude;
@@ -26,6 +27,10 @@ pub use envelope::{
     encode_ml_kem_768_public_key, encode_ml_kem_768_secret_key,
 };
 pub use errors::{PqcbError, Result};
+pub use hybrid::{
+    HYBRID_PROFILE_NAME, HYBRID_SHARED_SECRET_LEN, HybridEncapsulation, HybridKeyPair,
+    HybridPublicKey, HybridSecretKey, X25519_PUBLIC_KEY_LEN, X25519_SECRET_KEY_LEN,
+};
 pub use keys::{PublicKey, SecretKey};
 pub use sealed_box::{SEALED_BOX_NONCE_LEN, SEALED_BOX_TAG_LEN, SealedBox};
 pub use secure_session::{SecureSession, SecureSessionState};
