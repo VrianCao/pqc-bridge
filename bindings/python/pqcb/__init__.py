@@ -65,6 +65,20 @@ class _PqcbVersion(ctypes.Structure):
     ]
 
 
+class _PqcbBuffer(ctypes.Structure):
+    _fields_ = [
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("len", ctypes.c_size_t),
+    ]
+
+
+class _PqcbOwnedBuffer(ctypes.Structure):
+    _fields_ = [
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("len", ctypes.c_size_t),
+    ]
+
+
 _library: ctypes.CDLL | None = None
 
 
@@ -107,6 +121,42 @@ def _native() -> ctypes.CDLL:
         ctypes.POINTER(ctypes.c_bool),
     ]
     library.pqcb_backend_available.restype = ctypes.c_uint32
+    library.pqcb_ml_kem_768_keypair.argtypes = [
+        ctypes.POINTER(_PqcbOwnedBuffer),
+        ctypes.POINTER(_PqcbOwnedBuffer),
+    ]
+    library.pqcb_ml_kem_768_keypair.restype = ctypes.c_uint32
+    library.pqcb_ml_kem_768_encapsulate.argtypes = [
+        _PqcbBuffer,
+        ctypes.POINTER(_PqcbOwnedBuffer),
+        ctypes.POINTER(_PqcbOwnedBuffer),
+    ]
+    library.pqcb_ml_kem_768_encapsulate.restype = ctypes.c_uint32
+    library.pqcb_ml_kem_768_decapsulate.argtypes = [
+        _PqcbBuffer,
+        _PqcbBuffer,
+        ctypes.POINTER(_PqcbOwnedBuffer),
+    ]
+    library.pqcb_ml_kem_768_decapsulate.restype = ctypes.c_uint32
+    library.pqcb_ml_dsa_65_keypair.argtypes = [
+        ctypes.POINTER(_PqcbOwnedBuffer),
+        ctypes.POINTER(_PqcbOwnedBuffer),
+    ]
+    library.pqcb_ml_dsa_65_keypair.restype = ctypes.c_uint32
+    library.pqcb_ml_dsa_65_sign.argtypes = [
+        _PqcbBuffer,
+        _PqcbBuffer,
+        ctypes.POINTER(_PqcbOwnedBuffer),
+    ]
+    library.pqcb_ml_dsa_65_sign.restype = ctypes.c_uint32
+    library.pqcb_ml_dsa_65_verify.argtypes = [
+        _PqcbBuffer,
+        _PqcbBuffer,
+        _PqcbBuffer,
+    ]
+    library.pqcb_ml_dsa_65_verify.restype = ctypes.c_uint32
+    library.pqcb_buffer_free.argtypes = [_PqcbOwnedBuffer]
+    library.pqcb_buffer_free.restype = None
 
     _library = library
     return library
@@ -134,6 +184,116 @@ def backend_available(algorithm: str) -> bool:
     )
     _raise_for_status(status, "backend availability", algorithm)
     return bool(available.value)
+
+
+def kem_keypair() -> tuple[bytes, bytes]:
+    """Generate an ML-KEM-768 public and secret keypair."""
+
+    public_key = _PqcbOwnedBuffer()
+    secret_key = _PqcbOwnedBuffer()
+    status = _native().pqcb_ml_kem_768_keypair(
+        ctypes.byref(public_key),
+        ctypes.byref(secret_key),
+    )
+    _raise_for_status(status, "ML-KEM-768 keypair", "ML-KEM-768")
+    return (
+        _take_owned_buffer(public_key, "ML-KEM-768 public key"),
+        _take_owned_buffer(secret_key, "ML-KEM-768 secret key"),
+    )
+
+
+def kem_encapsulate(public_key: bytes) -> tuple[bytes, bytes]:
+    """Encapsulate an ML-KEM-768 shared secret for a public key."""
+
+    ciphertext = _PqcbOwnedBuffer()
+    shared_secret = _PqcbOwnedBuffer()
+    public_key_buffer = _borrow(public_key)
+    status = _native().pqcb_ml_kem_768_encapsulate(
+        public_key_buffer,
+        ctypes.byref(ciphertext),
+        ctypes.byref(shared_secret),
+    )
+    _raise_for_status(status, "ML-KEM-768 encapsulate", "ML-KEM-768")
+    return (
+        _take_owned_buffer(ciphertext, "ML-KEM-768 ciphertext"),
+        _take_owned_buffer(shared_secret, "ML-KEM-768 shared secret"),
+    )
+
+
+def kem_decapsulate(secret_key: bytes, ciphertext: bytes) -> bytes:
+    """Decapsulate an ML-KEM-768 shared secret."""
+
+    shared_secret = _PqcbOwnedBuffer()
+    status = _native().pqcb_ml_kem_768_decapsulate(
+        _borrow(secret_key),
+        _borrow(ciphertext),
+        ctypes.byref(shared_secret),
+    )
+    _raise_for_status(status, "ML-KEM-768 decapsulate", "ML-KEM-768")
+    return _take_owned_buffer(shared_secret, "ML-KEM-768 shared secret")
+
+
+def signature_keypair() -> tuple[bytes, bytes]:
+    """Generate an ML-DSA-65 public and secret keypair."""
+
+    public_key = _PqcbOwnedBuffer()
+    secret_key = _PqcbOwnedBuffer()
+    status = _native().pqcb_ml_dsa_65_keypair(
+        ctypes.byref(public_key),
+        ctypes.byref(secret_key),
+    )
+    _raise_for_status(status, "ML-DSA-65 keypair", "ML-DSA-65")
+    return (
+        _take_owned_buffer(public_key, "ML-DSA-65 public key"),
+        _take_owned_buffer(secret_key, "ML-DSA-65 secret key"),
+    )
+
+
+def sign(secret_key: bytes, message: bytes) -> bytes:
+    """Sign a message with an ML-DSA-65 secret key."""
+
+    signature = _PqcbOwnedBuffer()
+    status = _native().pqcb_ml_dsa_65_sign(
+        _borrow(secret_key),
+        _borrow(message),
+        ctypes.byref(signature),
+    )
+    _raise_for_status(status, "ML-DSA-65 sign", "ML-DSA-65")
+    return _take_owned_buffer(signature, "ML-DSA-65 signature")
+
+
+def verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
+    """Verify an ML-DSA-65 signature."""
+
+    status = _native().pqcb_ml_dsa_65_verify(
+        _borrow(public_key),
+        _borrow(message),
+        _borrow(signature),
+    )
+    _raise_for_status(status, "ML-DSA-65 verify", "ML-DSA-65")
+    return True
+
+
+def _borrow(data: bytes) -> _PqcbBuffer:
+    if not isinstance(data, bytes):
+        raise TypeError("binary inputs must be bytes")
+    if not data:
+        return _PqcbBuffer()
+
+    array = (ctypes.c_uint8 * len(data)).from_buffer_copy(data)
+    buffer = _PqcbBuffer(array, len(data))
+    setattr(buffer, "_keepalive", array)
+    return buffer
+
+
+def _take_owned_buffer(buffer: _PqcbOwnedBuffer, field: str) -> bytes:
+    if not buffer.data or buffer.len == 0:
+        raise NullPointerError(f"{field} returned an empty owned buffer")
+
+    try:
+        return ctypes.string_at(buffer.data, buffer.len)
+    finally:
+        _native().pqcb_buffer_free(buffer)
 
 
 def _raise_for_status(status: int, operation: str, algorithm: str | None = None) -> None:
@@ -177,5 +337,11 @@ __all__ = [
     "abi_version",
     "backend_available",
     "create_secure_session",
+    "kem_decapsulate",
+    "kem_encapsulate",
+    "kem_keypair",
     "native_library_path",
+    "sign",
+    "signature_keypair",
+    "verify",
 ]
