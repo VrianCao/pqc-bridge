@@ -181,7 +181,11 @@ fn validate_case(case: &KatCase) -> Result<(), String> {
     }
     require_present("case.operation", &case.operation)?;
     match case.expected.as_str() {
-        "success" | "invalid-length" | "verification-failed" | "crypto-failure" => {}
+        "success"
+        | "invalid-length"
+        | "verification-failed"
+        | "crypto-failure"
+        | "changed-secret" => {}
         expected => {
             return Err(format!(
                 "case {} has unsupported expected result: {expected}",
@@ -209,6 +213,7 @@ fn dispatch_manifest(manifest: &Manifest) -> Result<(), String> {
     let dispatch = match (manifest.algorithm.as_str(), manifest.parameter_set.as_str()) {
         ("ML-KEM", "ML-KEM-768") => dispatch_ml_kem_case,
         ("ML-DSA", "ML-DSA-65") => dispatch_ml_dsa_case,
+        ("Hybrid KEM", "X25519-ML-KEM-768") => dispatch_hybrid_case,
         (algorithm, parameter_set) => {
             return Err(format!(
                 "unsupported KAT manifest target: {algorithm} {parameter_set}"
@@ -238,6 +243,16 @@ fn dispatch_ml_dsa_case(case: &KatCase) -> Result<(), String> {
         "keygen" | "sign" | "verify" => Ok(()),
         operation => Err(format!(
             "case {} unsupported ML-DSA operation: {operation}",
+            case.id
+        )),
+    }
+}
+
+fn dispatch_hybrid_case(case: &KatCase) -> Result<(), String> {
+    match case.operation.as_str() {
+        "decapsulate" => Ok(()),
+        operation => Err(format!(
+            "case {} unsupported hybrid operation: {operation}",
             case.id
         )),
     }

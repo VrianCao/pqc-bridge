@@ -18,12 +18,13 @@ High-level Rust examples:
 ```sh
 cargo run -p pqcb-backend-rustcrypto --example signed_message
 cargo run -p pqcb-backend-rustcrypto --example sealed_box
+cargo run -p pqcb-backend-rustcrypto --example hybrid_session
 cargo run -p pqcb-core --example secure_session
 ```
 
-`secure_session` demonstrates the v0.4 state-machine skeleton only. The final
-hybrid X25519 + ML-KEM-768 composition remains planned for v0.5 and currently
-fails closed when requested.
+`secure_session` demonstrates the v0.4 state-machine skeleton. The
+`hybrid_session` example demonstrates the v0.5 X25519 + ML-KEM-768 combiner
+through the RustCrypto-backed facade.
 
 Package and smoke checks:
 
@@ -36,7 +37,6 @@ Package and smoke checks:
 
 Planned future examples:
 
-- secure-session binding examples after v0.5 hybrid composition
 - file-envelope
 - ffi-c
 

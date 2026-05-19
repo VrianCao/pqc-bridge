@@ -28,8 +28,16 @@ This keeps current classical security while adding post-quantum protection.
 
 ### API Client to Server
 
-Use `SecureSession` once available. Avoid manually composing KEM, HKDF, and
-AEAD unless you are building a protocol.
+Use the `X25519-ML-KEM-768` hybrid profile for new SDK-managed session setup.
+The RustCrypto backend exposes a runnable example:
+
+```sh
+cargo run -p pqcb-backend-rustcrypto --example hybrid_session
+```
+
+Bind protocol name, version, peer identity, and replay/freshness material into
+the caller context passed to hybrid setup. Avoid manually composing KEM, HKDF,
+and AEAD unless you are building a protocol.
 
 ### Software Release Signing
 
