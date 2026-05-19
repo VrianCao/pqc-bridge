@@ -70,6 +70,8 @@ jobs:
         working-directory: bindings/node
       - run: python -m compileall pqcb
         working-directory: bindings/python
+      - run: python smoke_abi.py
+        working-directory: bindings/python
       - run: go test ./...
         working-directory: bindings/go
 
