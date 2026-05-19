@@ -34,18 +34,38 @@ Envelope parsing has a `cargo-fuzz` target at
 v1 envelope decoder without requiring secrets, network access, or backend
 cryptographic operations.
 
+FFI primitive boundary fuzzing has a target at
+`fuzz/fuzz_targets/ffi_primitives.rs`. It exercises borrowed buffers, owned
+output buffers, null output guards, length validation, status mapping, and
+free-path behavior for ML-KEM-768 and ML-DSA-65 ABI entrypoints.
+
+Seed corpus files live under `fuzz/corpus/`. The envelope corpus includes one
+valid v1 public-key envelope and malformed envelope-like inputs. The FFI corpus
+includes selector-prefixed inputs for backend availability, invalid primitive
+lengths, null output handling, and signature verification status paths.
+
 Install `cargo-fuzz` before running libFuzzer locally:
 
 ```sh
 cargo install cargo-fuzz
 cargo fuzz build envelope_decode
+cargo fuzz build ffi_primitives
 cargo fuzz run envelope_decode
+cargo fuzz run ffi_primitives
 ```
 
 When `cargo-fuzz` is not installed, the target can still be type-checked with:
 
 ```sh
 cargo check --manifest-path fuzz/Cargo.toml --bin envelope_decode
+cargo check --manifest-path fuzz/Cargo.toml --bin ffi_primitives
+```
+
+Stable-release fuzz smoke runs should be bounded and reproducible:
+
+```sh
+cargo fuzz run envelope_decode -- -runs=256
+cargo fuzz run ffi_primitives -- -runs=256
 ```
 
 ## Binding Checks
