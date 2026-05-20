@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Final
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 _ALGORITHMS: Final = {
     "ML-KEM-768": 1,

@@ -44,7 +44,7 @@ import (
 )
 
 // PackageVersion is the Go binding package version.
-const PackageVersion = "0.1.0"
+const PackageVersion = "0.2.0"
 
 const (
 	statusOK                 = 0

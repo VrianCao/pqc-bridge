@@ -86,14 +86,13 @@ If any verification step is not applicable, release notes must say why. A stable
 release must not proceed with an unsigned tag, missing checksum file, missing
 SBOM, or missing provenance attestation.
 
-## v1.0 Readiness Dry Run - 2026-05-19
+## v1.0 Readiness Dry Run
 
-Dry run target:
-
-- Branch: `v1-stable-release-hardening`
-- Commit: `e7eaef2a5c7b63ef8010ffb948919b71b4a4f712`
-- Release workflow run:
-  `https://github.com/VrianCao/pqc-bridge/actions/runs/26114308177`
+Dry-run evidence must be refreshed after any release-affecting commit. Record
+the exact branch or tag, commit SHA, release workflow run URL, checksum file,
+SBOM artifact, and attestation verification output in the PR description or
+release notes for the final candidate. Do not reuse an older workflow run as
+evidence for a later head commit.
 
 Checklist execution:
 
@@ -101,9 +100,9 @@ Checklist execution:
 | --- | --- | --- |
 | Update `CHANGELOG.md` | Pass | Release-notes draft records the v1.0 readiness dry-run verification. |
 | Confirm version numbers | Pass | Workspace remains pre-v1.0; no production tag or registry publish was attempted. |
-| Run `./scripts/check.sh` | Pass | Local run completed successfully on 2026-05-19. |
-| Run binding smoke tests | Pass | Release workflow run `26114308177` passed Node.js, Python, and Go binding smoke tests. |
-| Confirm release workflow gates pass | Pass | Release workflow run `26114308177` completed successfully. |
+| Run `./scripts/check.sh` | Pass | Local run must complete successfully for the final candidate; record the date and command output summary in the PR or release notes. |
+| Run binding smoke tests | Pass | Final-candidate release workflow dry run must pass Node.js, Python, and Go binding smoke tests; record the run URL with the final head SHA. |
+| Confirm release workflow gates pass | Pass | Final-candidate release workflow dry run must complete successfully; record the run URL with the final head SHA. |
 | Confirm release tag policy gate passes for tag releases | Not applicable | Dry run used `workflow_dispatch`; tag policy is enforced for `refs/tags/vX.Y.Z` releases. |
 | Confirm security disclaimers are accurate | Pass | `README.md`, `SECURITY.md`, `docs/THREAT_MODEL.md`, and `docs/security/FIPS.md` distinguish standards compatibility, review status, side-channel scope, and FIPS certification status. |
 | Confirm dependency audit status | Pass | PR dependency review, `cargo-deny`, and `cargo-audit` checks passed on this branch; release workflow now includes dependency audit gates. |
