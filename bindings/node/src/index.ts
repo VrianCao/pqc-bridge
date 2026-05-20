@@ -34,6 +34,8 @@ const STATUS = {
   Panic: 255,
 } as const;
 
+const SUPPORTED_ABI_MAJOR = 1;
+
 export class PqcbError extends Error {
   constructor(message: string) {
     super(message);
@@ -91,7 +93,15 @@ export class PanicError extends PqcbError {
   }
 }
 
+export class UnsupportedAbiError extends PqcbError {
+  constructor(actual: number | string) {
+    super(`unsupported PQC Bridge C ABI major version: ${actual}`);
+    this.name = "UnsupportedAbiError";
+  }
+}
+
 type NativeLibrary = {
+  pqcb_abi_version_major: () => number;
   pqcb_version: () => { major: number; minor: number; patch: number };
   pqcb_backend_available: (algorithmId: number, available: [boolean]) => number;
   pqcb_ml_kem_768_keypair: (
@@ -179,8 +189,19 @@ function native(): NativeLibrary {
       len: "size_t",
     });
     const ownedBufferOut = () => koffi.out(koffi.pointer(ownedBuffer));
+    let abiVersionMajor: NativeLibrary["pqcb_abi_version_major"];
+    try {
+      abiVersionMajor = library.func(
+        "pqcb_abi_version_major",
+        "uint16_t",
+        [],
+      ) as NativeLibrary["pqcb_abi_version_major"];
+    } catch {
+      throw new UnsupportedAbiError("missing pqcb_abi_version_major");
+    }
 
     loadedNative = {
+      pqcb_abi_version_major: abiVersionMajor,
       pqcb_version: library.func("pqcb_version", pqcbVersion, []) as NativeLibrary["pqcb_version"],
       pqcb_backend_available: library.func("pqcb_backend_available", "uint32_t", [
         "uint32_t",
@@ -219,10 +240,22 @@ function native(): NativeLibrary {
         "size_t",
       ]) as NativeLibrary["pqcb_buffer_free_parts"],
     };
+    const abiMajor = loadedNative.pqcb_abi_version_major();
+    if (abiMajor !== SUPPORTED_ABI_MAJOR) {
+      loadedNative = undefined;
+      throw new UnsupportedAbiError(abiMajor);
+    }
     return loadedNative;
   } catch (error) {
+    if (error instanceof UnsupportedAbiError) {
+      throw error;
+    }
     throw new BackendUnavailableError("native library load", error);
   }
+}
+
+export function abiMajorVersion(): number {
+  return native().pqcb_abi_version_major();
 }
 
 export function version(): string {

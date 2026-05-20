@@ -7,49 +7,44 @@ Semantic Versioning once it reaches v1.0.
 
 ## [Unreleased]
 
-### Breaking Changes
-
-- Use this section for any public Rust API break, C ABI major-version change,
-  serialized envelope incompatibility, binding API removal, CLI incompatibility,
-  or default algorithm semantic change. Each entry must include migration notes
-  and the affected packages or ABI symbols.
-
 ### Security
 
-- Use this section for vulnerability fixes, disabled unsafe algorithms or
-  backends, side-channel guidance changes, and compatibility breaks required for
-  safety.
+- Hardened the release workflow with SemVer signed-tag verification,
+  dependency audit gates, fuzz target build gates, GitHub Release asset upload,
+  and separated read-only source/SBOM generation from privileged artifact
+  attestation.
+- Documented the active GitHub Private Vulnerability Reporting channel and the
+  external security review plan required before production-secret support.
 
 ### Added
 
-- Use this section for new APIs, algorithms, bindings, commands, docs, tests,
-  and additive C ABI symbols or status codes.
+- Added ABI-major guards to the Node.js, Python, and Go bindings so unsupported
+  C ABI majors fail closed before primitive calls.
+- Added FFI hardening tests for unknown status messages, aliased output slots,
+  and worker-thread panic mapping.
 
 ### Changed
 
-- Use this section for behavior changes that keep the stable compatibility
-  contract intact. Any potentially breaking change belongs in
-  `Breaking Changes`.
-
-### Deprecated
-
-- Use this section for APIs, symbols, commands, or binding features scheduled
-  for removal. Include the replacement and earliest removal release.
-
-### Removed
-
-- Use this section for removals. Stable removals after v1.0 must either be in a
-  major release or be justified by a security issue.
+- Changed C `PqcbStatus` and `PqcbAlgorithm` declarations to fixed-width
+  `uint32_t` typedefs with constants so compiler enum-size flags cannot alter
+  the ABI.
+- Changed `pqcb_status_message` to accept raw status values and return a stable
+  message for unknown codes.
 
 ### Fixed
 
-- Use this section for bug fixes that preserve compatibility.
+- Rejected aliased multi-output FFI slots before allocation to avoid overwritten
+  output handles and leaks.
+- Mapped worker-thread panics back to `PQCB_STATUS_PANIC` instead of
+  `PQCB_STATUS_CRYPTO_FAILURE`.
+- Marked Rust-callable buffer free helpers as `unsafe` and documented their
+  ownership contract.
 
 ### Verification
 
 - Recorded the v1.0 release readiness dry run for
   `v1-stable-release-hardening`, including local `./scripts/check.sh`, release
-  workflow run `26114163526`, checksum/SBOM/provenance generation, and
+  workflow run `26114308177`, checksum/SBOM/provenance generation, and
   explicit dry-run non-publishing rationale.
 
 ## [0.1.0] - Unreleased
@@ -58,7 +53,7 @@ Semantic Versioning once it reaches v1.0.
 
 - Initial Rust workspace.
 - Core algorithm identifiers and backend traits.
-- C ABI version scaffold.
-- CLI command scaffold.
-- C/C++ header scaffold.
+- C ABI version baseline.
+- CLI command baseline.
+- C/C++ header baseline.
 - Architecture, roadmap, security, and governance documents.

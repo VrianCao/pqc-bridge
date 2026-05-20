@@ -28,8 +28,10 @@ X25519 + ML-KEM-768 -> HKDF -> AEAD keys
 Current status:
 
 - core state machine skeleton exists
-- hybrid composition is not yet implemented
-- attempts to use the hybrid path fail closed until v0.5
+- RustCrypto-backed X25519-ML-KEM-768 hybrid composition exists as a tested
+  lower-level combiner
+- the high-level `SecureSession` API remains a skeleton until lifecycle,
+  replay/freshness, and binding ergonomics are finalized
 
 Non-goals for v0.4:
 
@@ -116,7 +118,7 @@ pqcb_backend_rustcrypto::signed_message::verify(&keys.public_key, &decoded)?;
 The primitive API is the expert mode. It is intended for protocol implementors,
 security engineers, researchers, and application teams that need precise control.
 
-Planned primitive modules:
+Primitive modules:
 
 ```text
 kem.keypair(algorithm)
@@ -155,7 +157,7 @@ pqcb_backend_rustcrypto::signature::verify(
 # Ok::<(), pqcb_core::PqcbError>(())
 ```
 
-The v0.2 CLI mirrors these primitive operations for smoke testing:
+The pre-v1.0 CLI mirrors these primitive operations for smoke testing:
 
 ```sh
 pqcb keygen --kind signature --algorithm ML-DSA-65 \

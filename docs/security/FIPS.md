@@ -57,6 +57,10 @@ A future FIPS-oriented or side-channel review must define:
 - KAT, negative-test, fuzz, and release-artifact evidence included in the review
 - open risks and excluded threats
 
+The current external security review plan is documented in
+[`AUDIT_PLAN.md`](AUDIT_PLAN.md). It is a review readiness plan, not evidence of
+a completed audit or certification.
+
 ## Future Options
 
 Potential paths:

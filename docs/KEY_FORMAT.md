@@ -2,9 +2,11 @@
 
 PQC Bridge will use explicit versioned envelopes for serialized SDK objects.
 
-The v0.1 scaffold does not yet serialize production keys. This document defines
-the intended direction so future implementations do not invent incompatible
-formats independently.
+Pre-v1.0 releases define and parse the SDK-native envelope format, but they
+must not be used to serialize production secrets until the stable release
+checklist and security review scope are complete. This document keeps the
+format contract explicit so bindings and future implementations do not invent
+incompatible encodings independently.
 
 ## Goals
 
@@ -145,9 +147,9 @@ The internal envelope should remain available for SDK-native workflows.
 - CLI output must not print secret material unless explicitly requested.
 - Bindings must document runtime-specific memory limitations.
 
-## v0.2 CLI Smoke Formats
+## Pre-v1.0 CLI Smoke Formats
 
-The v0.2 CLI smoke commands write raw primitive bytes to explicit file paths.
+The pre-v1.0 CLI smoke commands write raw primitive bytes to explicit file paths.
 They are intended for backend smoke testing, not stable interchange.
 
 ```sh

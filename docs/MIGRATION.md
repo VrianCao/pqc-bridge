@@ -41,8 +41,9 @@ and AEAD unless you are building a protocol.
 
 ### Software Release Signing
 
-Use `SignedMessage` or the primitive signature API once ML-DSA support is
-enabled.
+Use the implemented ML-DSA primitive signature API for protocol-level signing
+tests. Use the high-level `SignedMessage` workflow only after its SDK-managed
+format and binding ergonomics are finalized.
 
 ### File Encryption
 
@@ -55,4 +56,4 @@ as file encryption keys.
 - Do not use raw shared secrets as encryption keys.
 - Do not remove classical cryptography before interoperability is ready.
 - Do not claim FIPS certification because an algorithm is standardized.
-- Do not use v0.1 scaffold builds for production secrets.
+- Do not use pre-v1.0 releases for production secrets.

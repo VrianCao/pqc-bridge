@@ -15,8 +15,15 @@ all been reviewed for the release being advertised.
 
 ## Reporting a Vulnerability
 
-Send a private report to the maintainers once project security contacts are
-published. Until then, do not use PQC Bridge for production secrets.
+Use GitHub Private Vulnerability Reporting from the repository Security tab, or
+open a private advisory draft at:
+
+```text
+https://github.com/VrianCao/pqc-bridge/security/advisories/new
+```
+
+Do not report suspected vulnerabilities through public issues. Do not use
+pre-v1.0 PQC Bridge releases for production secrets.
 
 Reports should include:
 
