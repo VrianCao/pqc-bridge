@@ -16,7 +16,7 @@ A backend must provide:
 - license compatibility
 - maintenance status
 
-## Planned Backend Classes
+## Backend Classes
 
 ### Rust-native backend
 
@@ -65,9 +65,9 @@ Use when:
 
 ## Backend Selection Policy
 
-v0.1 starts with contracts and no production crypto.
+The original v0.1 foundation started as a contracts-only SDK foundation.
 
-v0.2 should integrate one default backend for:
+The pre-v1.0 hardening branch integrates one default backend for:
 
 - ML-KEM-768
 - ML-DSA-65
@@ -94,7 +94,7 @@ The workspace dependency policy for v0.2 is:
 
 | Dependency | Version | Owner | Notes |
 | --- | --- | --- | --- |
-| `ml-kem` | `=0.3.2` | `pqcb-backend-rustcrypto` | Enable `getrandom` and `zeroize`; avoid `pkcs8` until key-envelope policy needs it. |
+| `ml-kem` | `=0.3.2` | `pqcb-backend-rustcrypto` | Enable `getrandom`, `hazmat`, and `zeroize`; avoid `pkcs8` until key-envelope policy needs it. `hazmat` is required for the adapter's explicit key/ciphertext handling and must stay isolated inside the backend crate. |
 | `ml-dsa` | `=0.1.0` | `pqcb-backend-rustcrypto` | Enable `getrandom` and `zeroize`; avoid `pkcs8` until serialization policy needs it. |
 | `zeroize` | workspace | `pqcb-core`, backend crates | Shared-secret and secret-key material must remain redacted and zeroized where possible. |
 
@@ -104,7 +104,11 @@ review.
 
 ### Cargo Features
 
-Feature names are part of the public build contract:
+Backend crate feature names are part of the public build contract. The CLI and
+FFI crates currently depend on the selected backend directly for the pre-v1.0
+release hardening branch; if optional provider selection is added later, it must
+be introduced as a new compatibility commitment and covered by binding smoke
+tests.
 
 | Crate | Feature | Default | Behavior |
 | --- | --- | --- | --- |
@@ -112,11 +116,13 @@ Feature names are part of the public build contract:
 | `pqcb-backend-rustcrypto` | `std` | yes | Enables standard-library integration for the backend crate. |
 | `pqcb-backend-rustcrypto` | `getrandom` | yes | Enables OS randomness through provider-supported RNG features. |
 | `pqcb-backend-rustcrypto` | `zeroize` | yes | Enables provider zeroization support where available. |
-| `pqcb-cli` | `backend-rustcrypto` | yes after adapter implementation | Uses the RustCrypto backend for smoke commands. |
-| `pqcb-ffi` | `backend-rustcrypto` | no until C ABI primitives are implemented | Exposes backend availability and primitive C ABI functions. |
+| `pqcb-cli` | direct backend dependency | yes | Uses the RustCrypto backend for smoke commands. |
+| `pqcb-ffi` | direct backend dependency | yes | Exposes backend availability and primitive C ABI functions. |
 
-Before the adapter implementation lands, provider-backed features may exist as
-mechanical wiring only and must fail closed with `BackendUnavailable`.
+Provider-neutral `pqcb-core` entrypoints still fail closed with
+`BackendUnavailable` when no concrete backend is supplied. The CLI and C ABI
+crates use the selected RustCrypto adapter directly for their pre-v1.0 smoke
+workflows and primitive binding gates.
 
 ### API Isolation Rules
 

@@ -16,8 +16,8 @@ implementations are provided by reviewed backends.
 ## Non-Goals
 
 - Implement novel cryptographic algorithms.
-- Replace TLS stacks in v0.1.
-- Provide FIPS 140-3 certification in v0.1.
+- Replace TLS stacks in pre-v1.0 releases.
+- Provide FIPS 140-3 certification in pre-v1.0 releases.
 - Become a kitchen-sink algorithm zoo.
 - Store or escrow application private keys.
 
@@ -72,8 +72,9 @@ Provides developer tooling for:
 - test vector validation
 - future migration scans
 
-v0.1 only exposes metadata and planned commands until cryptographic backends are
-integrated.
+Pre-v1.0 CLI builds include metadata and primitive smoke workflows backed by the
+selected RustCrypto adapter. Production-secret support remains blocked on stable
+release readiness and security review scope.
 
 ## Backend Strategy
 

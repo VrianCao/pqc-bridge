@@ -20,7 +20,7 @@ This document defines the security boundaries for PQC Bridge.
 - accidental developer misuse
 - replay and downgrade attempts in SDK-managed protocols
 
-## Out of Scope for v0.1
+## Out of Scope for Pre-v1.0
 
 - fully compromised host operating systems
 - malicious hardware
@@ -83,12 +83,15 @@ malformed envelopes, and tampered AEAD ciphertexts must fail closed.
 ## SecureSession Skeleton Notes
 
 The v0.4 `SecureSession` type is a state-machine skeleton only. It represents
-setup, ready, and closed states so bindings can align on lifecycle semantics
-before the v0.5 hybrid composition lands.
+setup, ready, and closed states so bindings can align on lifecycle semantics.
+The RustCrypto-backed X25519-ML-KEM-768 combiner is implemented and tested as a
+lower-level primitive, but it is not yet exposed as a production-ready
+SDK-managed session API.
 
 The skeleton must not silently downgrade to PQ-only or classical-only behavior.
-Until X25519 + ML-KEM-768 composition is implemented and tested, hybrid session
-setup returns `BackendUnavailable`.
+Until `SecureSession` binds lifecycle, replay/freshness, and binding behavior to
+the tested combiner, SDK-managed hybrid session setup returns
+`BackendUnavailable`.
 
 ## Hybrid Session Transcript Controls
 
@@ -156,6 +159,9 @@ Audit readiness scope:
   checksums, signed tags, and provenance attestations
 - documentation language for standards compatibility, review status, platform
   limitations, and certification status
+
+The external review plan, evidence package, and exit criteria are tracked in
+[`docs/security/AUDIT_PLAN.md`](security/AUDIT_PLAN.md).
 
 Open risks before a stable production claim:
 

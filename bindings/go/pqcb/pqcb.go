@@ -25,6 +25,7 @@ typedef struct {
 } PqcbVersion;
 
 extern PqcbVersion pqcb_version(void);
+extern uint16_t pqcb_abi_version_major(void);
 extern uint32_t pqcb_backend_available(uint32_t algorithm_id, bool *available);
 extern uint32_t pqcb_ml_kem_768_keypair(PqcbOwnedBuffer *public_key_out, PqcbOwnedBuffer *secret_key_out);
 extern uint32_t pqcb_ml_kem_768_encapsulate(PqcbBuffer public_key, PqcbOwnedBuffer *ciphertext_out, PqcbOwnedBuffer *shared_secret_out);
@@ -57,6 +58,8 @@ const (
 
 	mlKem768 = 1
 	mlDsa65  = 2
+
+	supportedABIMajor = 1
 )
 
 // Sentinel errors used by Error.Unwrap.
@@ -68,6 +71,7 @@ var (
 	ErrVerificationFailed = errors.New("pqcb verification failed")
 	ErrCryptoFailure      = errors.New("pqcb cryptographic operation failed")
 	ErrPanic              = errors.New("pqcb panic caught at FFI boundary")
+	ErrUnsupportedABI     = errors.New("pqcb unsupported C ABI major version")
 )
 
 // Error wraps deterministic ABI error identity with operation context.
@@ -108,10 +112,18 @@ func Version() string {
 	return fmt.Sprintf("%d.%d.%d", version.major, version.minor, version.patch)
 }
 
+// ABIMajorVersion returns the loaded C ABI major version.
+func ABIMajorVersion() uint16 {
+	return uint16(C.pqcb_abi_version_major())
+}
+
 // BackendAvailable reports whether the native backend supports algorithm.
 func BackendAvailable(algorithm string) (bool, error) {
 	algorithmID, err := algorithmID(algorithm)
 	if err != nil {
+		return false, err
+	}
+	if err := checkABIMajor("backend availability"); err != nil {
 		return false, err
 	}
 
@@ -126,6 +138,9 @@ func BackendAvailable(algorithm string) (bool, error) {
 
 // KEMKeypairGenerate generates an ML-KEM-768 keypair.
 func KEMKeypairGenerate() (KEMKeypair, error) {
+	if err := checkABIMajor("ML-KEM-768 keypair"); err != nil {
+		return KEMKeypair{}, err
+	}
 	var publicKey C.PqcbOwnedBuffer
 	var secretKey C.PqcbOwnedBuffer
 	status := C.pqcb_ml_kem_768_keypair(&publicKey, &secretKey)
@@ -150,6 +165,9 @@ func KEMKeypairGenerate() (KEMKeypair, error) {
 
 // KEMEncapsulate encapsulates an ML-KEM-768 shared secret for publicKey.
 func KEMEncapsulate(publicKey []byte) (Encapsulation, error) {
+	if err := checkABIMajor("ML-KEM-768 encapsulate"); err != nil {
+		return Encapsulation{}, err
+	}
 	var ciphertext C.PqcbOwnedBuffer
 	var sharedSecret C.PqcbOwnedBuffer
 	status := C.pqcb_ml_kem_768_encapsulate(
@@ -178,6 +196,9 @@ func KEMEncapsulate(publicKey []byte) (Encapsulation, error) {
 
 // KEMDecapsulate decapsulates an ML-KEM-768 shared secret.
 func KEMDecapsulate(secretKey []byte, ciphertext []byte) ([]byte, error) {
+	if err := checkABIMajor("ML-KEM-768 decapsulate"); err != nil {
+		return nil, err
+	}
 	var sharedSecret C.PqcbOwnedBuffer
 	status := C.pqcb_ml_kem_768_decapsulate(
 		borrow(secretKey),
@@ -193,6 +214,9 @@ func KEMDecapsulate(secretKey []byte, ciphertext []byte) ([]byte, error) {
 
 // SignatureKeypairGenerate generates an ML-DSA-65 keypair.
 func SignatureKeypairGenerate() (SignatureKeypair, error) {
+	if err := checkABIMajor("ML-DSA-65 keypair"); err != nil {
+		return SignatureKeypair{}, err
+	}
 	var publicKey C.PqcbOwnedBuffer
 	var secretKey C.PqcbOwnedBuffer
 	status := C.pqcb_ml_dsa_65_keypair(&publicKey, &secretKey)
@@ -217,6 +241,9 @@ func SignatureKeypairGenerate() (SignatureKeypair, error) {
 
 // Sign signs message with an ML-DSA-65 secret key.
 func Sign(secretKey []byte, message []byte) ([]byte, error) {
+	if err := checkABIMajor("ML-DSA-65 sign"); err != nil {
+		return nil, err
+	}
 	var signature C.PqcbOwnedBuffer
 	status := C.pqcb_ml_dsa_65_sign(
 		borrow(secretKey),
@@ -232,12 +259,22 @@ func Sign(secretKey []byte, message []byte) ([]byte, error) {
 
 // Verify verifies an ML-DSA-65 signature.
 func Verify(publicKey []byte, message []byte, signature []byte) error {
+	if err := checkABIMajor("ML-DSA-65 verify"); err != nil {
+		return err
+	}
 	status := C.pqcb_ml_dsa_65_verify(
 		borrow(publicKey),
 		borrow(message),
 		borrow(signature),
 	)
 	return errorFromStatus(status, "ML-DSA-65 verify")
+}
+
+func checkABIMajor(operation string) error {
+	if ABIMajorVersion() != supportedABIMajor {
+		return &Error{Op: operation, Err: ErrUnsupportedABI}
+	}
+	return nil
 }
 
 func algorithmID(algorithm string) (uint32, error) {

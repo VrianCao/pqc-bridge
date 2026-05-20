@@ -40,13 +40,13 @@ crates/
   pqcb-ffi/         Stable C ABI boundary
   pqcb-cli/         Developer CLI
 bindings/
-  node/             Node.js package scaffold
-  python/           Python package scaffold
-  go/               Go module scaffold
-  java/             Java binding scaffold
-  kotlin/           Android/Kotlin binding scaffold
-  swift/            Swift package scaffold
-  wasm/             WebAssembly package scaffold
+  node/             Node.js package and primitive smoke binding
+  python/           Python package and primitive smoke binding
+  go/               Go module and primitive smoke binding
+  java/             Java binding baseline
+  kotlin/           Android/Kotlin binding baseline
+  swift/            Swift package baseline
+  wasm/             WebAssembly package baseline
   cpp/              C/C++ headers
 docs/
   API_DESIGN.md     High-level and primitive API blueprint
@@ -81,8 +81,10 @@ cargo test --workspace --all-targets
 cargo run -p pqcb -- algorithms
 ```
 
-Current CLI output is intentionally limited to metadata and planned algorithms
-until a reviewed backend is integrated.
+The CLI includes metadata commands and pre-v1.0 primitive smoke workflows backed
+by the selected RustCrypto adapter. Do not treat CLI-generated keys or messages
+as production secrets before the stable release checklist and security review
+scope are complete.
 
 Runnable Rust examples for the high-level APIs are listed in
 [examples/README.md](examples/README.md).

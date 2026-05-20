@@ -23,6 +23,7 @@ _STATUS_BACKEND_UNAVAILABLE: Final = 4
 _STATUS_VERIFICATION_FAILED: Final = 5
 _STATUS_CRYPTO_FAILURE: Final = 6
 _STATUS_PANIC: Final = 255
+_SUPPORTED_ABI_MAJOR: Final = 1
 
 
 class PqcbError(RuntimeError):
@@ -55,6 +56,10 @@ class CryptoFailureError(PqcbError):
 
 class PanicError(PqcbError):
     """Raised when the C ABI catches a panic."""
+
+
+class UnsupportedAbiError(PqcbError):
+    """Raised when the native C ABI major version is unsupported."""
 
 
 class _PqcbVersion(ctypes.Structure):
@@ -114,49 +119,61 @@ def _native() -> ctypes.CDLL:
     except OSError as exc:
         raise BackendUnavailableError("native library load backend is unavailable") from exc
 
-    library.pqcb_version.argtypes = []
-    library.pqcb_version.restype = _PqcbVersion
-    library.pqcb_backend_available.argtypes = [
-        ctypes.c_uint32,
-        ctypes.POINTER(ctypes.c_bool),
-    ]
-    library.pqcb_backend_available.restype = ctypes.c_uint32
-    library.pqcb_ml_kem_768_keypair.argtypes = [
-        ctypes.POINTER(_PqcbOwnedBuffer),
-        ctypes.POINTER(_PqcbOwnedBuffer),
-    ]
-    library.pqcb_ml_kem_768_keypair.restype = ctypes.c_uint32
-    library.pqcb_ml_kem_768_encapsulate.argtypes = [
-        _PqcbBuffer,
-        ctypes.POINTER(_PqcbOwnedBuffer),
-        ctypes.POINTER(_PqcbOwnedBuffer),
-    ]
-    library.pqcb_ml_kem_768_encapsulate.restype = ctypes.c_uint32
-    library.pqcb_ml_kem_768_decapsulate.argtypes = [
-        _PqcbBuffer,
-        _PqcbBuffer,
-        ctypes.POINTER(_PqcbOwnedBuffer),
-    ]
-    library.pqcb_ml_kem_768_decapsulate.restype = ctypes.c_uint32
-    library.pqcb_ml_dsa_65_keypair.argtypes = [
-        ctypes.POINTER(_PqcbOwnedBuffer),
-        ctypes.POINTER(_PqcbOwnedBuffer),
-    ]
-    library.pqcb_ml_dsa_65_keypair.restype = ctypes.c_uint32
-    library.pqcb_ml_dsa_65_sign.argtypes = [
-        _PqcbBuffer,
-        _PqcbBuffer,
-        ctypes.POINTER(_PqcbOwnedBuffer),
-    ]
-    library.pqcb_ml_dsa_65_sign.restype = ctypes.c_uint32
-    library.pqcb_ml_dsa_65_verify.argtypes = [
-        _PqcbBuffer,
-        _PqcbBuffer,
-        _PqcbBuffer,
-    ]
-    library.pqcb_ml_dsa_65_verify.restype = ctypes.c_uint32
-    library.pqcb_buffer_free.argtypes = [_PqcbOwnedBuffer]
-    library.pqcb_buffer_free.restype = None
+    try:
+        library.pqcb_version.argtypes = []
+        library.pqcb_version.restype = _PqcbVersion
+        library.pqcb_abi_version_major.argtypes = []
+        library.pqcb_abi_version_major.restype = ctypes.c_uint16
+        abi_major = int(library.pqcb_abi_version_major())
+        if abi_major != _SUPPORTED_ABI_MAJOR:
+            raise UnsupportedAbiError(
+                f"unsupported PQC Bridge C ABI major version: {abi_major}"
+            )
+        library.pqcb_backend_available.argtypes = [
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_bool),
+        ]
+        library.pqcb_backend_available.restype = ctypes.c_uint32
+        library.pqcb_ml_kem_768_keypair.argtypes = [
+            ctypes.POINTER(_PqcbOwnedBuffer),
+            ctypes.POINTER(_PqcbOwnedBuffer),
+        ]
+        library.pqcb_ml_kem_768_keypair.restype = ctypes.c_uint32
+        library.pqcb_ml_kem_768_encapsulate.argtypes = [
+            _PqcbBuffer,
+            ctypes.POINTER(_PqcbOwnedBuffer),
+            ctypes.POINTER(_PqcbOwnedBuffer),
+        ]
+        library.pqcb_ml_kem_768_encapsulate.restype = ctypes.c_uint32
+        library.pqcb_ml_kem_768_decapsulate.argtypes = [
+            _PqcbBuffer,
+            _PqcbBuffer,
+            ctypes.POINTER(_PqcbOwnedBuffer),
+        ]
+        library.pqcb_ml_kem_768_decapsulate.restype = ctypes.c_uint32
+        library.pqcb_ml_dsa_65_keypair.argtypes = [
+            ctypes.POINTER(_PqcbOwnedBuffer),
+            ctypes.POINTER(_PqcbOwnedBuffer),
+        ]
+        library.pqcb_ml_dsa_65_keypair.restype = ctypes.c_uint32
+        library.pqcb_ml_dsa_65_sign.argtypes = [
+            _PqcbBuffer,
+            _PqcbBuffer,
+            ctypes.POINTER(_PqcbOwnedBuffer),
+        ]
+        library.pqcb_ml_dsa_65_sign.restype = ctypes.c_uint32
+        library.pqcb_ml_dsa_65_verify.argtypes = [
+            _PqcbBuffer,
+            _PqcbBuffer,
+            _PqcbBuffer,
+        ]
+        library.pqcb_ml_dsa_65_verify.restype = ctypes.c_uint32
+        library.pqcb_buffer_free.argtypes = [_PqcbOwnedBuffer]
+        library.pqcb_buffer_free.restype = None
+    except AttributeError as exc:
+        raise UnsupportedAbiError(
+            "unsupported PQC Bridge C ABI: missing required symbol"
+        ) from exc
 
     _library = library
     return library
@@ -167,6 +184,12 @@ def abi_version() -> str:
 
     version = _native().pqcb_version()
     return f"{version.major}.{version.minor}.{version.patch}"
+
+
+def abi_major_version() -> int:
+    """Return the C ABI major version."""
+
+    return int(_native().pqcb_abi_version_major())
 
 
 def backend_available(algorithm: str) -> bool:
@@ -332,8 +355,10 @@ __all__ = [
     "NullPointerError",
     "PanicError",
     "PqcbError",
+    "UnsupportedAbiError",
     "VerificationFailedError",
     "__version__",
+    "abi_major_version",
     "abi_version",
     "backend_available",
     "create_secure_session",

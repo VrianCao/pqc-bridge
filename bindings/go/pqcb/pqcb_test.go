@@ -10,6 +10,9 @@ func TestVersionAndAvailability(t *testing.T) {
 	if got := Version(); got != "0.1.0" {
 		t.Fatalf("Version() = %q, want 0.1.0", got)
 	}
+	if got := ABIMajorVersion(); got != supportedABIMajor {
+		t.Fatalf("ABIMajorVersion() = %d, want %d", got, supportedABIMajor)
+	}
 
 	available, err := BackendAvailable("ML-KEM-768")
 	if err != nil {

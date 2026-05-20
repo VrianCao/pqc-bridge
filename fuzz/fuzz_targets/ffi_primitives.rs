@@ -40,8 +40,11 @@ fuzz_target!(|data: &[u8]| {
                     &raw mut shared_secret,
                 )
             };
-            pqcb_buffer_free(ciphertext);
-            pqcb_buffer_free(shared_secret);
+            // SAFETY: outputs were returned by PQC Bridge or are null/zero.
+            unsafe {
+                pqcb_buffer_free(ciphertext);
+                pqcb_buffer_free(shared_secret);
+            }
         }
         2 => {
             let (secret_key, ciphertext) = split_once(payload);
@@ -55,7 +58,10 @@ fuzz_target!(|data: &[u8]| {
                     &raw mut shared_secret,
                 )
             };
-            pqcb_buffer_free(shared_secret);
+            // SAFETY: output was returned by PQC Bridge or is null/zero.
+            unsafe {
+                pqcb_buffer_free(shared_secret);
+            }
         }
         3 => {
             let (secret_key, message) = split_once(payload);
@@ -65,7 +71,10 @@ fuzz_target!(|data: &[u8]| {
             let _ = unsafe {
                 pqcb_ml_dsa_65_sign(borrow(secret_key), borrow(message), &raw mut signature)
             };
-            pqcb_buffer_free(signature);
+            // SAFETY: output was returned by PQC Bridge or is null/zero.
+            unsafe {
+                pqcb_buffer_free(signature);
+            }
         }
         4 => {
             let (public_key, rest) = split_once(payload);
@@ -80,12 +89,18 @@ fuzz_target!(|data: &[u8]| {
             // SAFETY: null output is intentionally exercised and must be rejected.
             let _ =
                 unsafe { pqcb_ml_dsa_65_sign(borrow(payload), borrow(&[]), ptr::null_mut()) };
-            pqcb_buffer_free(out);
+            // SAFETY: output is null/zero because the call rejected a null output.
+            unsafe {
+                pqcb_buffer_free(out);
+            }
             // SAFETY: null output is intentionally exercised and must be rejected.
             let _ = unsafe {
                 pqcb_ml_kem_768_encapsulate(borrow(payload), ptr::null_mut(), &raw mut out)
             };
-            pqcb_buffer_free(out);
+            // SAFETY: output is null/zero because the call rejected a null output.
+            unsafe {
+                pqcb_buffer_free(out);
+            }
         }
     }
 });

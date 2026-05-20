@@ -11,14 +11,17 @@ Repository and SDK foundation:
 - `pqcb-core`
 - `pqcb-ffi`
 - `pqcb-cli`
-- C header scaffold
-- Node/Python/Go binding scaffolds
-- Java/Kotlin/Swift/WASM/C++ placeholders
+- C header baseline
+- Node/Python/Go binding baselines
+- Java/Kotlin/Swift/WASM/C++ package baselines
 - architecture and security documents
 - CI baseline
 - contribution and governance policies
 
-No production cryptographic backend is enabled in v0.1.
+The original v0.1 foundation did not advertise production cryptographic
+support. The pre-v1.0 hardening branch now includes a selected RustCrypto
+backend path, but production-secret support remains gated on stable release
+readiness and security review.
 
 ## v0.2 First Crypto Backend
 

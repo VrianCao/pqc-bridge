@@ -2,37 +2,41 @@
 
 The C ABI is the stable boundary for most language bindings.
 
-## v0.1 ABI
+## Current ABI Surface
 
-The v0.1 ABI exposes:
+The pre-v1.0 ABI exposes:
 
-- ABI version
-- package version
+- ABI version and package version functions
+- fixed-width status and algorithm identifiers
+- explicit caller-owned input buffers and library-owned output buffers
+- backend availability discovery
+- ML-KEM-768 keygen, encapsulate, and decapsulate entrypoints
+- ML-DSA-65 keygen, sign, and verify entrypoints
 
-Cryptographic functions are intentionally not exposed until backend integration,
-memory ownership rules, and tests are ready.
+The primitive entrypoints are backed by the selected RustCrypto adapter on the
+pre-v1.0 hardening branch. They remain developer-preview APIs until the stable
+release checklist, support policy, and external review scope are complete.
 
-## v0.2 ABI Model
+## ABI Model
 
-The v0.2 ABI uses explicit caller-owned input buffers and library-owned output
+The ABI uses explicit caller-owned input buffers and library-owned output
 buffers. All exported symbols use `extern "C"`, `#[repr(C)]` data structures,
 and the `pqcb_` symbol prefix.
 
 ### Buffer Types
 
-Planned C header declarations:
+C header declarations:
 
 ```c
-typedef enum PqcbStatus {
-  PQCB_STATUS_OK = 0,
-  PQCB_STATUS_NULL_POINTER = 1,
-  PQCB_STATUS_INVALID_LENGTH = 2,
-  PQCB_STATUS_INVALID_ALGORITHM = 3,
-  PQCB_STATUS_BACKEND_UNAVAILABLE = 4,
-  PQCB_STATUS_VERIFICATION_FAILED = 5,
-  PQCB_STATUS_CRYPTO_FAILURE = 6,
-  PQCB_STATUS_PANIC = 255
-} PqcbStatus;
+typedef uint32_t PqcbStatus;
+#define PQCB_STATUS_OK ((PqcbStatus)0u)
+#define PQCB_STATUS_NULL_POINTER ((PqcbStatus)1u)
+#define PQCB_STATUS_INVALID_LENGTH ((PqcbStatus)2u)
+#define PQCB_STATUS_INVALID_ALGORITHM ((PqcbStatus)3u)
+#define PQCB_STATUS_BACKEND_UNAVAILABLE ((PqcbStatus)4u)
+#define PQCB_STATUS_VERIFICATION_FAILED ((PqcbStatus)5u)
+#define PQCB_STATUS_CRYPTO_FAILURE ((PqcbStatus)6u)
+#define PQCB_STATUS_PANIC ((PqcbStatus)255u)
 
 typedef struct PqcbBuffer {
   const uint8_t *data;
@@ -52,6 +56,9 @@ void pqcb_buffer_free_parts(uint8_t *data, size_t len);
 `PqcbBuffer` is caller-owned and borrowed only for the duration of the call.
 `PqcbOwnedBuffer` is library-owned and must be released exactly once with
 `pqcb_buffer_free` or `pqcb_buffer_free_parts`.
+`PqcbStatus` is a fixed-width `uint32_t` ABI value, not a C enum, so compiler
+enum-size flags cannot change function signatures. Unknown status codes are
+mapped to a static `"unknown status"` message by `pqcb_status_message`.
 
 ### Ownership Table
 
@@ -62,10 +69,10 @@ void pqcb_buffer_free_parts(uint8_t *data, size_t len);
 | `pqcb_backend_available` | algorithm ID by value | status/boolean by value | No heap ownership. |
 | `pqcb_buffer_free` | `PqcbOwnedBuffer` by value | none | Releases one library-owned output buffer. |
 | `pqcb_buffer_free_parts` | pointer and length from `PqcbOwnedBuffer` | none | Releases one library-owned output buffer for FFI layers that cannot safely pass structs by value. |
-| `pqcb_ml_kem_768_keypair` | none | public key and secret key `PqcbOwnedBuffer`s | Caller must free both output buffers. On error, outputs are null/zero. |
-| `pqcb_ml_kem_768_encapsulate` | public key `PqcbBuffer` | ciphertext and shared secret `PqcbOwnedBuffer`s | Caller owns input. Caller frees both outputs. Shared secret is never printed or exposed as a string. |
+| `pqcb_ml_kem_768_keypair` | none | public key and secret key `PqcbOwnedBuffer`s | Output slots must be distinct. Caller must free both output buffers. On error, outputs are null/zero. |
+| `pqcb_ml_kem_768_encapsulate` | public key `PqcbBuffer` | ciphertext and shared secret `PqcbOwnedBuffer`s | Output slots must be distinct. Caller owns input. Caller frees both outputs. Shared secret is never printed or exposed as a string. |
 | `pqcb_ml_kem_768_decapsulate` | secret key and ciphertext `PqcbBuffer`s | shared secret `PqcbOwnedBuffer` | Caller owns inputs. Caller frees output. |
-| `pqcb_ml_dsa_65_keypair` | none | public key and secret key `PqcbOwnedBuffer`s | Caller must free both output buffers. On error, outputs are null/zero. |
+| `pqcb_ml_dsa_65_keypair` | none | public key and secret key `PqcbOwnedBuffer`s | Output slots must be distinct. Caller must free both output buffers. On error, outputs are null/zero. |
 | `pqcb_ml_dsa_65_sign` | secret key and message `PqcbBuffer`s | signature `PqcbOwnedBuffer` | Caller owns inputs. Caller frees output. |
 | `pqcb_ml_dsa_65_verify` | public key, message, and signature `PqcbBuffer`s | verification status by value | No output allocation. Verification failure returns a distinct status, not success. |
 
@@ -89,7 +96,7 @@ operations:
 
 | Function | Meaning |
 | --- | --- |
-| `pqcb_abi_version` | Packed ABI version for compatibility checks. |
+| `pqcb_abi_version` | Scalar ABI version retained for compatibility checks. |
 | `pqcb_abi_version_major` | ABI major version for breaking-change checks. |
 | `pqcb_abi_version_minor` | ABI minor version for additive capability checks. |
 | `pqcb_version` | PQC Bridge package semantic version. |
@@ -111,6 +118,9 @@ Unknown algorithm IDs return `PQCB_STATUS_INVALID_ALGORITHM`.
   thread with `pqcb_buffer_free`.
 - Callers must not mutate borrowed input memory while a function is executing.
 - The ABI does not retain borrowed input pointers after a function returns.
+- Output slots passed to allocating functions must be fresh or already cleared
+  to null/zero. Callers must free any previous `PqcbOwnedBuffer` before reusing
+  the same storage as an output slot.
 
 ### Sanitizer Plan
 

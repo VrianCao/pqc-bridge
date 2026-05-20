@@ -130,16 +130,17 @@ pub extern "C" fn pqcb_version() -> PqcbVersion {
 
 /// Returns a static status message for `status`.
 #[unsafe(no_mangle)]
-pub extern "C" fn pqcb_status_message(status: PqcbStatus) -> *const core::ffi::c_char {
+pub extern "C" fn pqcb_status_message(status: u32) -> *const core::ffi::c_char {
     match status {
-        PqcbStatus::Ok => c"ok",
-        PqcbStatus::NullPointer => c"null pointer",
-        PqcbStatus::InvalidLength => c"invalid length",
-        PqcbStatus::InvalidAlgorithm => c"invalid algorithm",
-        PqcbStatus::BackendUnavailable => c"backend unavailable",
-        PqcbStatus::VerificationFailed => c"verification failed",
-        PqcbStatus::CryptoFailure => c"cryptographic operation failed",
-        PqcbStatus::Panic => c"panic caught at FFI boundary",
+        status if status == PqcbStatus::Ok as u32 => c"ok",
+        status if status == PqcbStatus::NullPointer as u32 => c"null pointer",
+        status if status == PqcbStatus::InvalidLength as u32 => c"invalid length",
+        status if status == PqcbStatus::InvalidAlgorithm as u32 => c"invalid algorithm",
+        status if status == PqcbStatus::BackendUnavailable as u32 => c"backend unavailable",
+        status if status == PqcbStatus::VerificationFailed as u32 => c"verification failed",
+        status if status == PqcbStatus::CryptoFailure as u32 => c"cryptographic operation failed",
+        status if status == PqcbStatus::Panic as u32 => c"panic caught at FFI boundary",
+        _ => c"unknown status",
     }
     .as_ptr()
 }
@@ -186,6 +187,9 @@ pub unsafe extern "C" fn pqcb_ml_kem_768_keypair(
     if public_key_out.is_null() || secret_key_out.is_null() {
         return PqcbStatus::NullPointer;
     }
+    if outputs_alias(public_key_out, secret_key_out) {
+        return PqcbStatus::NullPointer;
+    }
     clear_output(public_key_out);
     clear_output(secret_key_out);
 
@@ -210,6 +214,9 @@ pub unsafe extern "C" fn pqcb_ml_kem_768_encapsulate(
     shared_secret_out: *mut PqcbOwnedBuffer,
 ) -> PqcbStatus {
     if ciphertext_out.is_null() || shared_secret_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    if outputs_alias(ciphertext_out, shared_secret_out) {
         return PqcbStatus::NullPointer;
     }
     clear_output(ciphertext_out);
@@ -268,6 +275,9 @@ pub unsafe extern "C" fn pqcb_ml_dsa_65_keypair(
     secret_key_out: *mut PqcbOwnedBuffer,
 ) -> PqcbStatus {
     if public_key_out.is_null() || secret_key_out.is_null() {
+        return PqcbStatus::NullPointer;
+    }
+    if outputs_alias(public_key_out, secret_key_out) {
         return PqcbStatus::NullPointer;
     }
     clear_output(public_key_out);
@@ -340,8 +350,13 @@ pub unsafe extern "C" fn pqcb_ml_dsa_65_verify(
 ///
 /// Passing a null/zero buffer is allowed. Passing a buffer not returned by PQC
 /// Bridge is undefined behavior.
+///
+/// # Safety
+///
+/// Non-empty buffers must have been returned by PQC Bridge and must be passed
+/// back at most once.
 #[unsafe(no_mangle)]
-pub extern "C" fn pqcb_buffer_free(buffer: PqcbOwnedBuffer) {
+pub unsafe extern "C" fn pqcb_buffer_free(buffer: PqcbOwnedBuffer) {
     if buffer.data.is_null() || buffer.len == 0 {
         return;
     }
@@ -361,9 +376,17 @@ pub extern "C" fn pqcb_buffer_free(buffer: PqcbOwnedBuffer) {
 ///
 /// This is equivalent to `pqcb_buffer_free(PqcbOwnedBuffer { data, len })` and
 /// is provided for FFI callers that cannot safely pass small structs by value.
+///
+/// # Safety
+///
+/// Non-empty pointer/length pairs must come from a PQC Bridge-owned buffer and
+/// must be passed back at most once.
 #[unsafe(no_mangle)]
-pub extern "C" fn pqcb_buffer_free_parts(data: *mut u8, len: usize) {
-    pqcb_buffer_free(PqcbOwnedBuffer { data, len });
+pub unsafe extern "C" fn pqcb_buffer_free_parts(data: *mut u8, len: usize) {
+    // SAFETY: this function has the same safety contract as `pqcb_buffer_free`.
+    unsafe {
+        pqcb_buffer_free(PqcbOwnedBuffer { data, len });
+    }
 }
 
 /// Converts a vector into a C ABI owned buffer.
@@ -402,6 +425,10 @@ fn clear_output(out: *mut PqcbOwnedBuffer) {
     }
 }
 
+fn outputs_alias(left: *const PqcbOwnedBuffer, right: *const PqcbOwnedBuffer) -> bool {
+    ptr::eq(left, right)
+}
+
 fn write_output(out: *mut PqcbOwnedBuffer, bytes: Vec<u8>) {
     // SAFETY: callers checked `out` for null and promise it points to writable
     // storage for one `PqcbOwnedBuffer`.
@@ -424,17 +451,18 @@ fn run_on_crypto_stack<T>(
 where
     T: Send + 'static,
 {
-    thread::Builder::new()
+    let worker = thread::Builder::new()
         .name("pqcb-ffi-crypto".to_owned())
         .stack_size(FFI_CRYPTO_STACK_SIZE)
         .spawn(operation)
         .map_err(|_| PqcbError::CryptoFailure {
             reason: "spawn crypto worker",
-        })?
-        .join()
-        .map_err(|_| PqcbError::CryptoFailure {
-            reason: "join crypto worker",
-        })?
+        })?;
+
+    match worker.join() {
+        Ok(result) => result,
+        Err(payload) => panic::resume_unwind(payload),
+    }
 }
 
 fn status_from_error(error: &PqcbError) -> PqcbStatus {
@@ -459,11 +487,20 @@ mod tests {
 
     #[test]
     fn status_messages_are_static_c_strings() {
-        let message = pqcb_status_message(PqcbStatus::InvalidLength);
+        let message = pqcb_status_message(PqcbStatus::InvalidLength as u32);
 
         // SAFETY: `pqcb_status_message` returns a static nul-terminated string.
         let message = unsafe { CStr::from_ptr(message) };
         assert_eq!(message.to_str(), Ok("invalid length"));
+    }
+
+    #[test]
+    fn unknown_status_message_is_safe() {
+        let message = pqcb_status_message(999);
+
+        // SAFETY: `pqcb_status_message` returns a static nul-terminated string.
+        let message = unsafe { CStr::from_ptr(message) };
+        assert_eq!(message.to_str(), Ok("unknown status"));
     }
 
     #[test]
@@ -515,13 +552,19 @@ mod tests {
 
         assert!(!buffer.data.is_null());
         assert_eq!(buffer.len, 3);
-        pqcb_buffer_free(buffer);
+        // SAFETY: buffer was allocated by PQC Bridge and is freed exactly once.
+        unsafe {
+            pqcb_buffer_free(buffer);
+        }
     }
 
     #[test]
     fn freeing_empty_buffer_is_noop() {
-        pqcb_buffer_free(PqcbOwnedBuffer::empty());
-        pqcb_buffer_free_parts(ptr::null_mut(), 0);
+        // SAFETY: null/zero buffers are explicitly accepted no-ops.
+        unsafe {
+            pqcb_buffer_free(PqcbOwnedBuffer::empty());
+            pqcb_buffer_free_parts(ptr::null_mut(), 0);
+        }
     }
 
     #[test]
@@ -530,7 +573,10 @@ mod tests {
 
         assert!(!buffer.data.is_null());
         assert_eq!(buffer.len, 3);
-        pqcb_buffer_free_parts(buffer.data, buffer.len);
+        // SAFETY: buffer was allocated by PQC Bridge and is freed exactly once.
+        unsafe {
+            pqcb_buffer_free_parts(buffer.data, buffer.len);
+        }
     }
 
     #[test]
@@ -549,6 +595,51 @@ mod tests {
             }
             .has_invalid_null()
         );
+    }
+
+    #[test]
+    fn multi_output_functions_reject_aliased_output_slots() {
+        let mut output = PqcbOwnedBuffer::empty();
+        let public_key = [0_u8; 1_184];
+
+        // SAFETY: the same valid slot is intentionally passed twice and must be
+        // rejected before any allocation can be overwritten.
+        let status = unsafe { pqcb_ml_kem_768_keypair(&raw mut output, &raw mut output) };
+        assert_eq!(status, PqcbStatus::NullPointer);
+        assert_eq!(output, PqcbOwnedBuffer::empty());
+
+        // SAFETY: the aliased output slots are intentionally tested.
+        let status = unsafe {
+            pqcb_ml_kem_768_encapsulate(
+                PqcbBuffer {
+                    data: public_key.as_ptr(),
+                    len: public_key.len(),
+                },
+                &raw mut output,
+                &raw mut output,
+            )
+        };
+        assert_eq!(status, PqcbStatus::NullPointer);
+        assert_eq!(output, PqcbOwnedBuffer::empty());
+
+        // SAFETY: the same valid slot is intentionally passed twice and must be
+        // rejected before any allocation can be overwritten.
+        let status = unsafe { pqcb_ml_dsa_65_keypair(&raw mut output, &raw mut output) };
+        assert_eq!(status, PqcbStatus::NullPointer);
+        assert_eq!(output, PqcbOwnedBuffer::empty());
+    }
+
+    #[test]
+    fn crypto_worker_panic_maps_to_panic_status() {
+        let status = catch_status(|| {
+            run_on_crypto_stack(|| -> Result<(), PqcbError> {
+                panic!("worker panic");
+            })
+            .map_err(|error| status_from_error(&error))?;
+            Ok(())
+        });
+
+        assert_eq!(status, PqcbStatus::Panic);
     }
 
     #[test]
@@ -604,11 +695,14 @@ mod tests {
             unsafe { slice::from_raw_parts(decapsulated.data, decapsulated.len) };
         assert_eq!(encapsulated_secret, decapsulated_secret);
 
-        pqcb_buffer_free(public_key);
-        pqcb_buffer_free(secret_key);
-        pqcb_buffer_free(ciphertext);
-        pqcb_buffer_free(encapsulated);
-        pqcb_buffer_free(decapsulated);
+        // SAFETY: buffers were allocated by PQC Bridge and are freed exactly once.
+        unsafe {
+            pqcb_buffer_free(public_key);
+            pqcb_buffer_free(secret_key);
+            pqcb_buffer_free(ciphertext);
+            pqcb_buffer_free(encapsulated);
+            pqcb_buffer_free(decapsulated);
+        }
     }
 
     #[test]
@@ -714,9 +808,12 @@ mod tests {
         };
         assert_eq!(status, PqcbStatus::VerificationFailed);
 
-        pqcb_buffer_free(public_key);
-        pqcb_buffer_free(secret_key);
-        pqcb_buffer_free(signature_out);
+        // SAFETY: buffers were allocated by PQC Bridge and are freed exactly once.
+        unsafe {
+            pqcb_buffer_free(public_key);
+            pqcb_buffer_free(secret_key);
+            pqcb_buffer_free(signature_out);
+        }
     }
 
     #[test]

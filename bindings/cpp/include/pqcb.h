@@ -15,16 +15,15 @@ typedef struct PqcbVersion {
   uint16_t patch;
 } PqcbVersion;
 
-typedef enum PqcbStatus {
-  PQCB_STATUS_OK = 0,
-  PQCB_STATUS_NULL_POINTER = 1,
-  PQCB_STATUS_INVALID_LENGTH = 2,
-  PQCB_STATUS_INVALID_ALGORITHM = 3,
-  PQCB_STATUS_BACKEND_UNAVAILABLE = 4,
-  PQCB_STATUS_VERIFICATION_FAILED = 5,
-  PQCB_STATUS_CRYPTO_FAILURE = 6,
-  PQCB_STATUS_PANIC = 255
-} PqcbStatus;
+typedef uint32_t PqcbStatus;
+#define PQCB_STATUS_OK ((PqcbStatus)0u)
+#define PQCB_STATUS_NULL_POINTER ((PqcbStatus)1u)
+#define PQCB_STATUS_INVALID_LENGTH ((PqcbStatus)2u)
+#define PQCB_STATUS_INVALID_ALGORITHM ((PqcbStatus)3u)
+#define PQCB_STATUS_BACKEND_UNAVAILABLE ((PqcbStatus)4u)
+#define PQCB_STATUS_VERIFICATION_FAILED ((PqcbStatus)5u)
+#define PQCB_STATUS_CRYPTO_FAILURE ((PqcbStatus)6u)
+#define PQCB_STATUS_PANIC ((PqcbStatus)255u)
 
 typedef struct PqcbBuffer {
   const uint8_t *data;
@@ -36,10 +35,9 @@ typedef struct PqcbOwnedBuffer {
   size_t len;
 } PqcbOwnedBuffer;
 
-typedef enum PqcbAlgorithm {
-  PQCB_ALGORITHM_ML_KEM_768 = 1,
-  PQCB_ALGORITHM_ML_DSA_65 = 2
-} PqcbAlgorithm;
+typedef uint32_t PqcbAlgorithm;
+#define PQCB_ALGORITHM_ML_KEM_768 ((PqcbAlgorithm)1u)
+#define PQCB_ALGORITHM_ML_DSA_65 ((PqcbAlgorithm)2u)
 
 uint32_t pqcb_abi_version(void);
 uint16_t pqcb_abi_version_major(void);

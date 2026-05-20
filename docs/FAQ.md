@@ -2,8 +2,11 @@
 
 ## Is PQC Bridge production-ready?
 
-No. The v0.1 repository is a developer preview scaffold. It intentionally does
-not include production cryptographic backends yet.
+No. Pre-v1.0 releases include a selected RustCrypto backend path, KAT coverage,
+binding smoke tests, fuzz targets, and release gates, but they are still
+developer previews. Do not use them for production secrets until the stable
+release checklist and security review scope are complete for the advertised
+release.
 
 ## Why not implement algorithms from scratch?
 
@@ -13,8 +16,10 @@ stable APIs, and reducing developer misuse.
 
 ## What should ordinary developers use first?
 
-Once implemented, the recommended first API will be the high-level
-`SecureSession` API using hybrid key agreement.
+For protocol engineers, the implemented primitive APIs expose ML-KEM-768,
+ML-DSA-65, and a tested X25519-ML-KEM-768 hybrid combiner. Ordinary application
+developers should wait for the high-level `SecureSession` API to graduate from
+its skeleton state before using SDK-managed sessions.
 
 ## What is KEM?
 
@@ -34,7 +39,7 @@ FIPS 204. It descends from the CRYSTALS-Dilithium design.
 ## What is hybrid mode?
 
 Hybrid mode combines classical cryptography with post-quantum cryptography. The
-default planned profile is:
+implemented migration profile is:
 
 ```text
 X25519 + ML-KEM-768
@@ -55,6 +60,7 @@ security profiles can be added for users with long-lived or high-value secrets.
 
 ## Will PQC Bridge support all languages?
 
-The architecture is designed for many bindings over a shared core. The first
-targets are Rust, C ABI, Node.js, Python, and Go. Java, Kotlin, Swift, WASM, and
-C++ are planned.
+The architecture is designed for many bindings over a shared core. Rust, C ABI,
+Node.js, Python, Go, Java, Swift, WASM, and C/C++ build or smoke gates exist in
+the repository, with production support still gated on release readiness and
+security review.

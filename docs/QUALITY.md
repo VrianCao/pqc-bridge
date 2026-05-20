@@ -68,6 +68,29 @@ cargo fuzz run envelope_decode -- -runs=256
 cargo fuzz run ffi_primitives -- -runs=256
 ```
 
+The release workflow type-checks both fuzz targets so changes that break the
+fuzzing baseline block source material generation.
+
+## Dependency and License Review
+
+Stable-release candidates must pass:
+
+- `cargo deny check`
+- `cargo audit`
+- GitHub dependency review for pull requests
+- manual review of any new package registry ownership or license exception
+
+The selected RustCrypto backend dependencies are pinned in the workspace and
+documented in `docs/BACKENDS.md`. Version changes require changelog review,
+KAT verification, and release-gate review before they are treated as stable.
+
+## Support Window
+
+Pre-v1.0 releases do not support production secrets. Stable support begins only
+when `docs/RELEASE.md`, `docs/ABI.md`, `SECURITY.md`, and release notes identify
+the supported package version, C ABI major/minor version, backend feature set,
+reporting process, and remaining limitations.
+
 ## Binding Checks
 
 Each binding should include:
