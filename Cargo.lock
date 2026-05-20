@@ -564,7 +564,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -574,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-backend-rustcrypto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chacha20poly1305",
  "hkdf",
@@ -590,7 +590,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-ffi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pqcb-backend-rustcrypto",
  "pqcb-core",
@@ -609,7 +609,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-wasm"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "prettyplease"

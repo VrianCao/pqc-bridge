@@ -1,5 +1,5 @@
 public enum PQCB {
-    public static let version = "0.1.0"
+    public static let version = "0.2.0"
 
     public static func createSecureSession() throws -> Never {
         throw PQCBError.backendUnavailable

@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-backend-rustcrypto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chacha20poly1305",
  "hkdf",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "sha2",
  "thiserror",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "pqcb-ffi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pqcb-backend-rustcrypto",
  "pqcb-core",

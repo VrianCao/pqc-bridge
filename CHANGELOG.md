@@ -7,6 +7,14 @@ Semantic Versioning once it reaches v1.0.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Bumped pre-v1.0 package versions to `0.2.0` because the Rust-callable
+  `pqcb-ffi` buffer free helpers now require `unsafe`. Rust callers must wrap
+  `pqcb_buffer_free` and `pqcb_buffer_free_parts` calls in `unsafe` blocks and
+  uphold the documented PQC Bridge-owned-buffer contract; the C ABI signatures
+  are unchanged.
+
 ### Security
 
 - Hardened the release workflow with SemVer signed-tag verification,
@@ -43,9 +51,11 @@ Semantic Versioning once it reaches v1.0.
 ### Verification
 
 - Recorded the v1.0 release readiness dry run for
-  `v1-stable-release-hardening`, including local `./scripts/check.sh`, release
-  workflow run `26114308177`, checksum/SBOM/provenance generation, and
-  explicit dry-run non-publishing rationale.
+  `v1-stable-release-hardening`, including local `./scripts/check.sh`,
+  release workflow dry-run evidence, checksum/SBOM/provenance generation, and
+  explicit dry-run non-publishing rationale. The PR or release notes must name
+  the final head SHA and run URL because any later release-affecting commit
+  invalidates older dry-run evidence.
 
 ## [0.1.0] - Unreleased
 

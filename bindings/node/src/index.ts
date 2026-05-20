@@ -10,7 +10,7 @@ const koffi = require("koffi") as typeof Koffi;
 
 export const name = "PQC Bridge";
 export const packageName = "pqcb";
-export const packageVersion = "0.1.0";
+export const packageVersion = "0.2.0";
 
 export type KemAlgorithm = "ML-KEM-768";
 export type SignatureAlgorithm = "ML-DSA-65";

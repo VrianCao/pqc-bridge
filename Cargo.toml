@@ -9,7 +9,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -25,8 +25,8 @@ anyhow = "1"
 chacha20poly1305 = "0.10.1"
 clap = { version = "4", features = ["derive"] }
 hkdf = "0.13.0"
-pqcb-core = { path = "crates/pqcb-core", version = "0.1.0" }
-pqcb-backend-rustcrypto = { path = "crates/pqcb-backend-rustcrypto", version = "0.1.0" }
+pqcb-core = { path = "crates/pqcb-core", version = "0.2.0" }
+pqcb-backend-rustcrypto = { path = "crates/pqcb-backend-rustcrypto", version = "0.2.0" }
 ml-kem = { version = "=0.3.2", features = ["getrandom", "hazmat", "zeroize"] }
 ml-dsa = { version = "=0.1.0", default-features = false, features = ["alloc", "getrandom", "zeroize"] }
 serde = { version = "1", features = ["derive"] }

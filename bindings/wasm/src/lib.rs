@@ -3,5 +3,5 @@
 
 /// Returns the scaffold package version.
 pub const fn version() -> &'static str {
-    "0.1.0"
+    "0.2.0"
 }

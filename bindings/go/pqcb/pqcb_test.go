@@ -7,8 +7,8 @@ import (
 )
 
 func TestVersionAndAvailability(t *testing.T) {
-	if got := Version(); got != "0.1.0" {
-		t.Fatalf("Version() = %q, want 0.1.0", got)
+	if got := Version(); got != "0.2.0" {
+		t.Fatalf("Version() = %q, want 0.2.0", got)
 	}
 	if got := ABIMajorVersion(); got != supportedABIMajor {
 		t.Fatalf("ABIMajorVersion() = %d, want %d", got, supportedABIMajor)
